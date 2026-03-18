@@ -1,0 +1,61 @@
+.event-card {
+  background: var(--surface);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: box-shadow 0.2s, transform 0.2s;
+}
+.event-card:hover { box-shadow: var(--shadow-lg); transform: translateY(-3px); }
+
+.event-card-body { padding: 20px; flex: 1; }
+.event-card-body h3 { font-size: 17px; font-weight: 700; margin-bottom: 8px; color: var(--text); }
+.event-card-body p  { font-size: 13px; color: var(--text-muted); margin-bottom: 6px; }
+
+.event-card-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 12px 0;
+}
+.event-card-meta span { font-size: 13px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
+
+.event-card-footer {
+  padding: 14px 20px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Venue card */
+.venue-card {
+  background: var(--surface);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  transition: box-shadow 0.2s, transform 0.2s;
+}
+.venue-card:hover { box-shadow: var(--shadow-lg); transform: translateY(-3px); }
+
+.venue-card-body { padding: 20px; }
+.venue-card-body h3 { font-size: 17px; font-weight: 700; margin-bottom: 10px; }
+.venue-card-body p  { font-size: 13px; color: var(--text-muted); margin-bottom: 6px; }
+
+.venue-card-footer {
+  padding: 14px 20px;
+  border-top: 1px solid var(--border);
+}
+
+.amenity-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.amenity-tag {
+  background: var(--primary-light);
+  color: var(--primary-dark);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+}

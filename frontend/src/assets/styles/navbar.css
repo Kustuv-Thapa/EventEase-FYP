@@ -1,0 +1,82 @@
+.navbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #1e1b4b;
+  padding: 0 28px;
+  height: 60px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+}
+
+.navbar-brand a {
+  color: #fff;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  text-decoration: none;
+}
+
+.navbar-links {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.navbar-links a {
+  color: #c7d2fe;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 6px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.navbar-links a:hover,
+.navbar-links a.active {
+  background: rgba(255,255,255,0.12);
+  color: #fff;
+}
+
+.navbar-divider {
+  width: 1px;
+  height: 20px;
+  background: rgba(255,255,255,0.15);
+  margin: 0 6px;
+}
+
+.navbar-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #c7d2fe;
+  font-size: 13px;
+}
+
+.navbar-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.logout-btn {
+  background: rgba(239,68,68,0.15) !important;
+  color: #fca5a5 !important;
+  border: 1px solid rgba(239,68,68,0.3) !important;
+  padding: 6px 14px !important;
+  font-size: 13px !important;
+}
+.logout-btn:hover {
+  background: rgba(239,68,68,0.3) !important;
+  color: #fff !important;
+}
