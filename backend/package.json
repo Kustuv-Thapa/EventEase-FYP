@@ -2,7 +2,12 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "seed:admin": "node src/seed/adminSeed.js"
+    "seed:admin": "node src/seed/adminSeed.js",
+    "test": "jest --runInBand"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": ["**/tests/**/*.test.js"]
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
@@ -12,9 +17,12 @@
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.2.3",
     "morgan": "^1.10.1",
+    "qrcode": "^1.5.4",
+    "uuid": "^13.0.0",
     "validator": "^13.15.26"
   },
   "devDependencies": {
+    "jest": "^29.7.0",
     "nodemon": "^3.1.14"
   }
 }

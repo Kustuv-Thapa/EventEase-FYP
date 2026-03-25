@@ -1,5 +1,7 @@
 const User = require("../models/User");
 const { signToken } = require("../utils/jwt");
+const crypto = require("crypto");
+const tokenBlacklist = require("../utils/tokenBlacklist");
 
 // POST /api/auth/register
 const register = async (req, res, next) => {
@@ -112,4 +114,88 @@ const getProfile = async (req, res, next) => {
   }
 };
 
-module.exports = { register, login, getProfile };
+// POST /api/auth/logout
+const logout = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const token = authHeader.split(" ")[1];
+      tokenBlacklist.add(token);
+    }
+    res.status(200).json({ success: true, message: "Logged out successfully" });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /api/auth/forgot-password
+const forgotPassword = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      res.status(400);
+      throw new Error("Email is required");
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    // Always return 200 to avoid revealing whether email exists
+    if (!user) {
+      return res.status(200).json({ success: true, message: "If that email is registered, a reset link has been sent." });
+    }
+
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    const hashedToken = crypto.createHash("sha256").update(rawToken).digest("hex");
+
+    user.passwordResetToken = hashedToken;
+    user.passwordResetExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+    await user.save({ validateBeforeSave: false });
+
+    // In production, send email. For now, return token in response for testing.
+    res.status(200).json({
+      success: true,
+      message: "If that email is registered, a reset link has been sent.",
+      // Remove resetToken from production response — only for dev/testing
+      resetToken: rawToken,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /api/auth/reset-password
+const resetPassword = async (req, res, next) => {
+  try {
+    const { token, newPassword } = req.body;
+    if (!token || !newPassword) {
+      res.status(400);
+      throw new Error("Token and new password are required");
+    }
+    if (newPassword.length < 6) {
+      res.status(400);
+      throw new Error("Password must be at least 6 characters");
+    }
+
+    const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+
+    const user = await User.findOne({
+      passwordResetToken: hashedToken,
+      passwordResetExpiry: { $gt: new Date() },
+    }).select("+password +passwordResetToken +passwordResetExpiry");
+
+    if (!user) {
+      res.status(400);
+      throw new Error("Invalid or expired reset token");
+    }
+
+    user.password = newPassword;
+    user.passwordResetToken = undefined;
+    user.passwordResetExpiry = undefined;
+    await user.save();
+
+    res.status(200).json({ success: true, message: "Password reset successfully" });
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { register, login, getProfile, logout, forgotPassword, resetPassword };

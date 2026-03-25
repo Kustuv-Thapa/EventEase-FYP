@@ -50,7 +50,7 @@ exports.createBooking = async (req, res, next) => {
     }
     if (start >= end) return res.status(400).json({ message: "endDateTime must be after startDateTime" });
 
-    // Transaction protects against race conditions (requires replica set)
+    // Transaction protects against race conditions
     await session.withTransaction(async () => {
       const venue = await Venue.findById(venueId).session(session);
       if (!venue || !venue.isActive) throw Object.assign(new Error("Venue not available"), { statusCode: 404 });
@@ -76,11 +76,11 @@ exports.createBooking = async (req, res, next) => {
       res.status(201).json({ message: "Booking requested (pending approval)", data: booking[0] });
     });
   } catch (err) {
-    // If not replica set, transaction may fail. Still return a helpful message.
+    // If not replica set, transaction will fail.
     if (err.message?.includes("Transaction numbers") || err.message?.includes("replica set")) {
       return res.status(500).json({
         message:
-          "Transactions require MongoDB replica set. Enable it for race-condition-safe booking. Your code is correct otherwise.",
+          "Transactions require MongoDB replica set. Enable it for race-condition-safe booking.",
       });
     }
     res.status(err.statusCode || 500).json({ message: err.message || "Failed to create booking" });
@@ -201,6 +201,25 @@ exports.adminDashboardStats = async (req, res, next) => {
 
     const total = await Booking.countDocuments();
     res.json({ data: { total, byStatus: stats } });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// GET /api/bookings/check?venueId=:id
+// Returns whether the current organizer has an active booking for a venue
+exports.checkMyBooking = async (req, res, next) => {
+  try {
+    const { venueId } = req.query;
+    if (!venueId) return res.status(400).json({ message: "venueId is required" });
+
+    const booking = await Booking.findOne({
+      venue: venueId,
+      requestedBy: req.user.id,
+      status: { $in: ["pending", "approved"] },
+    });
+
+    res.json({ data: { hasActiveBooking: !!booking, booking: booking || null } });
   } catch (err) {
     next(err);
   }

@@ -69,6 +69,28 @@ const EventCard = ({ event, index = 0 }) => {
           <span style={{ fontSize: 13, color: "var(--text-muted)", display: "flex", gap: 7, alignItems: "center" }}>
             <span>👤</span>By {event.organizerId?.name || "Organizer"}
           </span>
+          {event.capacity != null && (() => {
+            const remaining = event.capacity - (event.registeredCount || 0);
+            if (remaining <= 0) {
+              return (
+                <span style={{ fontSize: 12, fontWeight: 700, color: "#991b1b", background: "#fee2e2", border: "1px solid #ef4444", borderRadius: 999, padding: "2px 10px", display: "inline-flex", alignItems: "center", gap: 4, width: "fit-content" }}>
+                  🚫 Sold Out
+                </span>
+              );
+            }
+            if (remaining <= 5) {
+              return (
+                <span style={{ fontSize: 12, fontWeight: 700, color: "#92400e", background: "#fef3c7", border: "1px solid #f59e0b", borderRadius: 999, padding: "2px 10px", display: "inline-flex", alignItems: "center", gap: 4, width: "fit-content" }}>
+                  ⚡ Only {remaining} slot{remaining !== 1 ? "s" : ""} left
+                </span>
+              );
+            }
+            return (
+              <span style={{ fontSize: 12, color: "var(--text-muted)", display: "flex", gap: 4, alignItems: "center" }}>
+                <span>👥</span>{remaining} of {event.capacity} slots available
+              </span>
+            );
+          })()}
         </div>
       </div>
 

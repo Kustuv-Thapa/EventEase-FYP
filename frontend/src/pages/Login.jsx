@@ -51,6 +51,9 @@ const Login = () => {
         </button>
       </form>
       <p className="form-footer">
+        <Link to="/forgot-password" style={{ fontSize: 13, color: "var(--primary)" }}>Forgot Password?</Link>
+      </p>
+      <p className="form-footer">
         Don't have an account? <Link to="/register">Register</Link>
       </p>
     </div>

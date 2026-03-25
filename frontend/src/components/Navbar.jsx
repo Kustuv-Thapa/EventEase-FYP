@@ -26,11 +26,17 @@ const Navbar = () => {
         <NavLink to="/events">Events</NavLink>
 
         {isAuthenticated && user?.role !== "ADMIN" && (
-          <NavLink to="/my-registrations">My Registrations</NavLink>
+          <>
+            <NavLink to="/my-registrations">My Registrations</NavLink>
+            <NavLink to="/my-tickets">My Tickets</NavLink>
+          </>
         )}
 
         {user?.role === "ORGANIZER" && (
-          <NavLink to="/organizer/events">My Events</NavLink>
+          <>
+            <NavLink to="/organizer/events">My Events</NavLink>
+            <NavLink to="/verify-ticket">Verify Ticket</NavLink>
+          </>
         )}
 
         {user?.role === "ADMIN" && (

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getMyEventsApi, createEventApi, updateEventApi, deleteEventApi, submitEventForApprovalApi, uploadEventImageApi } from "../api/eventApi";
+import { getMyEventsApi, createEventApi, updateEventApi, deleteEventApi, submitEventForApprovalApi, uploadEventImageApi, updateCapacityApi, cancelEventApi } from "../api/eventApi";
 import { getVenuesApi } from "../api/venueApi";
 import ErrorMessage from "../components/ErrorMessage";
 import Loader from "../components/Loader";
@@ -36,6 +36,7 @@ const OrganizerEventManagement = () => {
   const [editingEvent, setEditingEvent] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
+  const [capacityEdit, setCapacityEdit] = useState({}); // { [eventId]: newCapacity }
 
   const fetchAll = async () => {
     try {
@@ -114,6 +115,19 @@ const OrganizerEventManagement = () => {
   const handleSubmitForApproval = async (id) => {
     try { setError(""); await submitEventForApprovalApi(id); fetchAll(); }
     catch (err) { setError(err.response?.data?.message || "Failed to submit for approval"); }
+  };
+
+  const handleUpdateCapacity = async (id) => {
+    const cap = parseInt(capacityEdit[id], 10);
+    if (!cap || cap < 1) { setError("Enter a valid capacity (min 1)"); return; }
+    try { setError(""); await updateCapacityApi(id, cap); setCapacityEdit((p) => ({ ...p, [id]: "" })); fetchAll(); }
+    catch (err) { setError(err.response?.data?.message || "Failed to update capacity"); }
+  };
+
+  const handleCancelEvent = async (id) => {
+    if (!window.confirm("Cancel this event? All confirmed registrations and tickets will be cancelled.")) return;
+    try { setError(""); await cancelEventApi(id); fetchAll(); }
+    catch (err) { setError(err.response?.data?.message || "Failed to cancel event"); }
   };
 
   if (loading) return <Loader />;
@@ -289,6 +303,26 @@ const OrganizerEventManagement = () => {
                     <button onClick={() => handleSubmitForApproval(event._id)} style={{ fontSize: 12, padding: "7px 14px", background: "var(--primary)", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 600 }}>
                       🚀 Submit
                     </button>
+                  )}
+                  {event.status === "PUBLISHED" && (
+                    <>
+                      <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                        <input
+                          type="number"
+                          min={1}
+                          placeholder="New capacity"
+                          value={capacityEdit[event._id] || ""}
+                          onChange={(e) => setCapacityEdit((p) => ({ ...p, [event._id]: e.target.value }))}
+                          style={{ width: 110, padding: "6px 8px", borderRadius: 6, border: "1px solid var(--border)", fontSize: 12 }}
+                        />
+                        <button onClick={() => handleUpdateCapacity(event._id)} style={{ fontSize: 12, padding: "7px 12px", background: "#dbeafe", color: "#1e40af", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 600, whiteSpace: "nowrap" }}>
+                          👥 Update
+                        </button>
+                      </div>
+                      <button onClick={() => handleCancelEvent(event._id)} style={{ fontSize: 12, padding: "7px 14px", background: "#fee2e2", color: "#991b1b", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 600 }}>
+                        🚫 Cancel Event
+                      </button>
+                    </>
                   )}
                   <button className="btn-danger" onClick={() => handleDelete(event._id)} style={{ fontSize: 12, padding: "7px 14px", marginLeft: "auto" }}>
                     🗑 Delete

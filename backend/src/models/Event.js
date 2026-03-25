@@ -44,6 +44,12 @@ const eventSchema = new mongoose.Schema(
       endDateTime: { type: Date, required: [true, "End date/time is required"] },
     },
 
+    capacity: {
+      type: Number,
+      required: [true, "Capacity is required"],
+      min: [1, "Capacity must be at least 1"],
+    },
+
     budget: {
       type: Number,
       min: 0,
@@ -68,6 +74,7 @@ const eventSchema = new mongoose.Schema(
     },
 
     image: { type: String, default: "" }, // base64 data URL
+    confirmedCount: { type: Number, default: 0, min: 0 },
   },
   { timestamps: true }
 );

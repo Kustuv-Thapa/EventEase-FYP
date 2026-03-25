@@ -1,4 +1,7 @@
 const Event = require("../models/Event");
+const Registration = require("../models/Registration");
+const Ticket = require("../models/Ticket");
+const Venue = require("../models/Venue");
 
 // Helper: ownership check
 const ensureCanModifyEvent = (reqUser, eventDoc) => {
@@ -14,11 +17,18 @@ const ensureCanModifyEvent = (reqUser, eventDoc) => {
 // POST /api/events (ADMIN/ORGANIZER)
 const createEvent = async (req, res, next) => {
   try {
-    const { title, description, genre, venue, schedule, budget, pricing } = req.body || {};
+    const { title, description, genre, venue, schedule, capacity, budget, pricing } = req.body || {};
 
-    if (!title || !venue || !schedule) {
+    if (!title || !venue || !schedule || !capacity) {
       res.status(400);
-      throw new Error("title, venue, and schedule are required");
+      throw new Error("title, venue, schedule, and capacity are required");
+    }
+
+    // Validate capacity against venue's physical capacity
+    const venueDoc = await Venue.findOne({ name: venue.name, "location.city": venue.city });
+    if (venueDoc && capacity > venueDoc.capacity) {
+      res.status(400);
+      throw new Error(`Event capacity (${capacity}) cannot exceed venue capacity (${venueDoc.capacity})`);
     }
 
     // Organizers always start at DRAFT; only admin can set status directly
@@ -26,7 +36,7 @@ const createEvent = async (req, res, next) => {
 
     const event = await Event.create({
       organizerId: req.user.id,
-      title, description, genre, venue, schedule, budget, pricing, status,
+      title, description, genre, venue, schedule, capacity, budget, pricing, status,
     });
 
     res.status(201).json({ success: true, message: "Event created", data: event });
@@ -60,10 +70,17 @@ const getEvents = async (req, res, next) => {
       Event.countDocuments(filters),
     ]);
 
+    // Attach registeredCount (use confirmedCount from model, fallback to countDocuments)
+    const itemsWithCount = items.map((ev) => {
+      const obj = ev.toObject();
+      obj.registeredCount = ev.confirmedCount || 0;
+      return obj;
+    });
+
     res.status(200).json({
       success: true,
       message: "Events fetched",
-      data: { items, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } },
+      data: { items: itemsWithCount, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } },
     });
   } catch (err) {
     next(err);
@@ -80,7 +97,10 @@ const getEventById = async (req, res, next) => {
       throw new Error("Event not found");
     }
 
-    res.status(200).json({ success: true, message: "Event fetched", data: event });
+    const obj = event.toObject();
+    obj.registeredCount = event.confirmedCount || 0;
+
+    res.status(200).json({ success: true, message: "Event fetched", data: obj });
   } catch (err) {
     next(err);
   }
@@ -94,17 +114,22 @@ const updateEvent = async (req, res, next) => {
     if (!event) { res.status(404); throw new Error("Event not found"); }
     if (!ensureCanModifyEvent(req.user, event)) { res.status(403); throw new Error("Forbidden"); }
 
-    const allowed = ["title", "description", "genre", "venue", "schedule", "budget", "pricing"];
+    const allowed = ["title", "description", "genre", "venue", "schedule", "capacity", "budget", "pricing"];
     // Organizers cannot directly set status to PUBLISHED
     if (req.user.role === "ADMIN") allowed.push("status");
 
+    const updates = {};
     for (const key of allowed) {
       if (req.body && typeof req.body[key] !== "undefined") {
-        event[key] = req.body[key];
+        updates[key] = req.body[key];
       }
     }
 
-    const updated = await event.save();
+    const updated = await Event.findByIdAndUpdate(
+      req.params.id,
+      { $set: updates },
+      { new: true, runValidators: false }
+    );
     res.status(200).json({ success: true, message: "Event updated", data: updated });
   } catch (err) {
     next(err);
@@ -226,6 +251,68 @@ const uploadEventImage = async (req, res, next) => {
   }
 };
 
+// PATCH /api/events/:id/capacity (ADMIN/ORGANIZER)
+const updateCapacity = async (req, res, next) => {
+  try {
+    const event = await Event.findById(req.params.id);
+    if (!event) { res.status(404); throw new Error("Event not found"); }
+    if (!ensureCanModifyEvent(req.user, event)) { res.status(403); throw new Error("Forbidden"); }
+
+    const newCapacity = parseInt(req.body.capacity, 10);
+    if (!newCapacity || newCapacity < 1) {
+      res.status(400); throw new Error("Capacity must be at least 1");
+    }
+
+    const confirmedCount = event.confirmedCount || 0;
+    if (newCapacity < confirmedCount) {
+      res.status(400);
+      throw new Error(`New capacity cannot be less than current confirmed registrations (${confirmedCount})`);
+    }
+
+    // Validate against venue's physical capacity
+    const venueDoc = await Venue.findOne({ name: event.venue?.name, "location.city": event.venue?.city });
+    if (venueDoc && newCapacity > venueDoc.capacity) {
+      res.status(400);
+      throw new Error(`Event capacity (${newCapacity}) cannot exceed venue capacity (${venueDoc.capacity})`);
+    }
+
+    event.capacity = newCapacity;
+    await event.save();
+    res.status(200).json({ success: true, message: "Capacity updated", data: event });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// PATCH /api/events/:id/cancel (ADMIN/ORGANIZER)
+const cancelEvent = async (req, res, next) => {
+  try {
+    const event = await Event.findById(req.params.id);
+    if (!event) { res.status(404); throw new Error("Event not found"); }
+    if (!ensureCanModifyEvent(req.user, event)) { res.status(403); throw new Error("Forbidden"); }
+    if (event.status !== "PUBLISHED") {
+      res.status(400); throw new Error("Only PUBLISHED events can be cancelled");
+    }
+
+    event.status = "CANCELLED";
+    await event.save();
+
+    // Cascade: cancel confirmed registrations and valid tickets
+    await Registration.updateMany(
+      { eventId: event._id, status: "confirmed" },
+      { $set: { status: "cancelled" } }
+    );
+    await Ticket.updateMany(
+      { event: event._id, status: "VALID" },
+      { $set: { status: "CANCELLED" } }
+    );
+
+    res.status(200).json({ success: true, message: "Event cancelled", data: event });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   createEvent,
   getEvents,
@@ -238,4 +325,6 @@ module.exports = {
   adminApproveEvent,
   adminRejectEvent,
   uploadEventImage,
+  updateCapacity,
+  cancelEvent,
 };

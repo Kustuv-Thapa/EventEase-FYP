@@ -11,3 +11,4 @@ export const getMyVenueBookingsApi = () => axiosInstance.get("/bookings/me");
 export const getAdminBookingsApi = (params) => axiosInstance.get("/bookings/admin/all", { params });
 export const approveVenueBookingApi = (bookingId) => axiosInstance.patch(`/bookings/${bookingId}/approve`);
 export const rejectVenueBookingApi = (bookingId, reason) => axiosInstance.patch(`/bookings/${bookingId}/reject`, { reason });
+export const checkMyBookingApi = (venueId) => axiosInstance.get("/bookings/check", { params: { venueId } });

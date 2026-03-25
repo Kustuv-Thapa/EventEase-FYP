@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getVenuesApi, createVenueApi, deleteVenueApi, uploadVenueImageApi } from "../api/venueApi";
+import { getVenuesApi, createVenueApi, updateVenueApi, deleteVenueApi, uploadVenueImageApi } from "../api/venueApi";
 import ErrorMessage from "../components/ErrorMessage";
 import Loader from "../components/Loader";
 import ImageUploader from "../components/ImageUploader";
@@ -13,7 +13,8 @@ const AdminVenueManagement = () => {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
-  const [uploadingImageFor, setUploadingImageFor] = useState(null); // venueId being updated
+  const [uploadingImageFor, setUploadingImageFor] = useState(null);
+  const [editingVenue, setEditingVenue] = useState(null); // venue being edited
 
   const fetchVenues = async () => {
     try {
@@ -41,7 +42,6 @@ const AdminVenueManagement = () => {
         location: { address: form.address, city: form.city, country: form.country },
         amenities: form.amenities ? form.amenities.split(",").map((a) => a.trim()).filter(Boolean) : [],
       });
-      // Upload image if provided
       if (form.image && form.image.startsWith("data:image/")) {
         await uploadVenueImageApi(res.data.data._id, form.image);
       }
@@ -50,6 +50,44 @@ const AdminVenueManagement = () => {
       fetchVenues();
     } catch (err) {
       setError(err.response?.data?.message || "Failed to create venue");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleEditClick = (v) => {
+    setEditingVenue(v._id);
+    setForm({
+      name: v.name || "",
+      capacity: v.capacity || "",
+      address: v.location?.address || "",
+      city: v.location?.city || "",
+      country: v.location?.country || "",
+      amenities: v.amenities?.join(", ") || "",
+      image: "",
+    });
+    setShowForm(false);
+  };
+
+  const handleUpdate = async (e) => {
+    e.preventDefault();
+    setError("");
+    setSubmitting(true);
+    try {
+      await updateVenueApi(editingVenue, {
+        name: form.name,
+        capacity: Number(form.capacity),
+        location: { address: form.address, city: form.city, country: form.country },
+        amenities: form.amenities ? form.amenities.split(",").map((a) => a.trim()).filter(Boolean) : [],
+      });
+      if (form.image && form.image.startsWith("data:image/")) {
+        await uploadVenueImageApi(editingVenue, form.image);
+      }
+      setEditingVenue(null);
+      setForm(EMPTY_FORM);
+      fetchVenues();
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to update venue");
     } finally {
       setSubmitting(false);
     }
@@ -165,11 +203,7 @@ const AdminVenueManagement = () => {
                   <input name="amenities" value={form.amenities} onChange={handleChange} placeholder="Parking, WiFi, Stage" />
                 </div>
                 <div style={{ gridColumn: "1 / -1" }}>
-                  <ImageUploader
-                    label="Venue Image"
-                    currentImage={form.image}
-                    onImageSelect={(img) => setForm((p) => ({ ...p, image: img }))}
-                  />
+                  <ImageUploader label="Venue Image" currentImage={form.image} onImageSelect={(img) => setForm((p) => ({ ...p, image: img }))} />
                 </div>
               </div>
               <div style={{ marginTop: 22, display: "flex", gap: 10 }}>
@@ -177,6 +211,56 @@ const AdminVenueManagement = () => {
                   {submitting ? "Creating..." : "Create Venue"}
                 </button>
                 <button type="button" onClick={() => setShowForm(false)} style={{ padding: "10px 20px" }}>Cancel</button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* Edit form */}
+        {editingVenue && (
+          <div style={{
+            background: "#fff", borderRadius: 16, border: "1px solid #fde68a",
+            boxShadow: "0 4px 20px rgba(0,0,0,0.08)", padding: 28, marginBottom: 28,
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 22 }}>
+              <div style={{ width: 4, height: 24, background: "#f59e0b", borderRadius: 4 }} />
+              <h3 style={{ fontSize: 17, fontWeight: 800, color: "#1e293b", margin: 0 }}>Edit Venue</h3>
+            </div>
+            <form onSubmit={handleUpdate}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px 24px" }}>
+                <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+                  <label>Venue Name *</label>
+                  <input name="name" value={form.name} onChange={handleChange} required placeholder="e.g. City Convention Hall" />
+                </div>
+                <div className="form-group">
+                  <label>Capacity *</label>
+                  <input type="number" name="capacity" value={form.capacity} onChange={handleChange} required min={1} placeholder="Max attendees" />
+                </div>
+                <div className="form-group">
+                  <label>City *</label>
+                  <input name="city" value={form.city} onChange={handleChange} required placeholder="Kathmandu" />
+                </div>
+                <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+                  <label>Address *</label>
+                  <input name="address" value={form.address} onChange={handleChange} required placeholder="Full street address" />
+                </div>
+                <div className="form-group">
+                  <label>Country *</label>
+                  <input name="country" value={form.country} onChange={handleChange} required placeholder="Nepal" />
+                </div>
+                <div className="form-group">
+                  <label>Amenities <span style={{ color: "#94a3b8", fontWeight: 400, textTransform: "none" }}>(comma-separated)</span></label>
+                  <input name="amenities" value={form.amenities} onChange={handleChange} placeholder="Parking, WiFi, Stage" />
+                </div>
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <ImageUploader label="Replace Image (optional)" currentImage={form.image} onImageSelect={(img) => setForm((p) => ({ ...p, image: img }))} />
+                </div>
+              </div>
+              <div style={{ marginTop: 22, display: "flex", gap: 10 }}>
+                <button type="submit" className="btn-primary" disabled={submitting} style={{ padding: "10px 24px", fontWeight: 700, background: "#f59e0b", borderColor: "#f59e0b" }}>
+                  {submitting ? "Saving..." : "Save Changes"}
+                </button>
+                <button type="button" onClick={() => { setEditingVenue(null); setForm(EMPTY_FORM); }} style={{ padding: "10px 20px" }}>Cancel</button>
               </div>
             </form>
           </div>
@@ -231,6 +315,12 @@ const AdminVenueManagement = () => {
                 </div>
                 <div style={{ padding: "10px 20px", borderTop: "1px solid #f1f5f9", background: "#fafbfc" }}>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                    <button
+                      onClick={() => handleEditClick(v)}
+                      style={{ padding: "7px 14px", borderRadius: 8, border: "none", cursor: "pointer", background: "#fef3c7", color: "#92400e", fontWeight: 700, fontSize: 13 }}
+                    >
+                      ✏️ Edit
+                    </button>
                     <button
                       onClick={() => setUploadingImageFor(uploadingImageFor === v._id ? null : v._id)}
                       style={{ padding: "7px 14px", borderRadius: 8, border: "none", cursor: "pointer", background: "#e0e7ff", color: "#3730a3", fontWeight: 700, fontSize: 13 }}

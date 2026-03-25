@@ -30,6 +30,8 @@ const userSchema = new mongoose.Schema(
       enum: ["ATTENDEE", "ORGANIZER", "ADMIN"],
       default: "ATTENDEE",
     },
+    passwordResetToken: { type: String, select: false },
+    passwordResetExpiry: { type: Date, select: false },
   },
   { timestamps: true }
 );

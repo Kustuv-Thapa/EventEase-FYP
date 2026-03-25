@@ -80,6 +80,39 @@ const EventDetails = () => {
           </div>
         </div>
 
+        {/* Capacity display */}
+        {event.capacity != null && (() => {
+          const remaining = event.capacity - (event.registeredCount || 0);
+          if (remaining <= 0) {
+            return (
+              <div style={{ background: "#fee2e2", border: "1px solid #ef4444", borderRadius: 10, padding: "12px 16px", marginBottom: 20, display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 20 }}>🚫</span>
+                <div>
+                  <div style={{ fontWeight: 700, color: "#991b1b", fontSize: 15 }}>Sold Out</div>
+                  <div style={{ fontSize: 13, color: "#b91c1c" }}>All {event.capacity} slots have been filled.</div>
+                </div>
+              </div>
+            );
+          }
+          if (remaining <= 5) {
+            return (
+              <div style={{ background: "#fef3c7", border: "1px solid #f59e0b", borderRadius: 10, padding: "12px 16px", marginBottom: 20, display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 20 }}>⚡</span>
+                <div>
+                  <div style={{ fontWeight: 700, color: "#92400e", fontSize: 15 }}>Only {remaining} slot{remaining !== 1 ? "s" : ""} left</div>
+                  <div style={{ fontSize: 13, color: "#b45309" }}>Register soon before it fills up.</div>
+                </div>
+              </div>
+            );
+          }
+          return (
+            <div style={{ background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 10, padding: "12px 16px", marginBottom: 20, display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 20 }}>👥</span>
+              <div style={{ fontSize: 14, color: "#166534" }}>{remaining} of {event.capacity} slots available</div>
+            </div>
+          );
+        })()}
+
         {message && <div className="alert alert-success">{message}</div>}
         <ErrorMessage message={error} />
 

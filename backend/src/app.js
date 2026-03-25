@@ -7,10 +7,10 @@ const eventRoutes = require("./routes/eventRoutes");
 const registrationRoutes = require("./routes/registrationRoutes");
 const venueRoutes = require("./routes/venueRoutes");
 const bookingRoutes = require("./routes/bookingRoutes");
+const ticketRoutes = require("./routes/ticketRoutes");
 
 const notFound = require("./middlewares/notFound");
 const errorHandler = require("./middlewares/errorHandler");
-
 
 const app = express();
 
@@ -19,7 +19,7 @@ app.use(cors());
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true, limit: "5mb" }));
 
-// Logging (should be before routes)
+// Logging
 if (process.env.NODE_ENV !== "test") {
   app.use(morgan("dev"));
 }
@@ -35,6 +35,7 @@ app.use("/api/events", eventRoutes);
 app.use("/api/registrations", registrationRoutes);
 app.use("/api/venues", venueRoutes);
 app.use("/api/bookings", bookingRoutes);
+app.use("/api/tickets", ticketRoutes);
 
 // 404 handler
 app.use(notFound);

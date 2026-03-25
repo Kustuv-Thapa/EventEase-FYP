@@ -17,8 +17,8 @@ const registrationSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["PENDING", "APPROVED", "REJECTED"],
-      default: "PENDING",
+      enum: ["pending", "confirmed", "cancelled"],
+      default: "pending",
       index: true,
     },
 

@@ -1,16 +1,16 @@
 import { useEffect, useState } from "react";
-import { getMyRegistrationsApi } from "../api/registrationApi";
+import { getMyRegistrationsApi, cancelMyRegistrationApi } from "../api/registrationApi";
 import Loader from "../components/Loader";
 import ErrorMessage from "../components/ErrorMessage";
 
 const STATUS_CONFIG = {
-  PENDING:  { label: "Pending",  color: "#92400e", bg: "#fef3c7", border: "#f59e0b", icon: "⏳" },
-  APPROVED: { label: "Approved", color: "#166534", bg: "#dcfce7", border: "#22c55e", icon: "✅" },
-  REJECTED: { label: "Rejected", color: "#991b1b", bg: "#fee2e2", border: "#ef4444", icon: "❌" },
+  pending:   { label: "Pending",   color: "#92400e", bg: "#fef3c7", border: "#f59e0b", icon: "⏳" },
+  confirmed: { label: "Confirmed", color: "#166534", bg: "#dcfce7", border: "#22c55e", icon: "✅" },
+  cancelled: { label: "Cancelled", color: "#991b1b", bg: "#fee2e2", border: "#ef4444", icon: "❌" },
 };
 
 const StatusBadge = ({ status }) => {
-  const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.PENDING;
+  const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.pending;
   return (
     <span style={{
       background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`,
@@ -23,27 +23,40 @@ const StatusBadge = ({ status }) => {
   );
 };
 
-const FILTERS = ["All", "PENDING", "APPROVED", "REJECTED"];
+const FILTERS = ["All", "pending", "confirmed", "cancelled"];
 
 const MyRegistrations = () => {
   const [registrations, setRegistrations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [activeFilter, setActiveFilter] = useState("All");
+  const [cancelling, setCancelling] = useState(null);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const res = await getMyRegistrationsApi();
-        setRegistrations(res.data.data || []);
-      } catch {
-        setError("Failed to fetch registrations");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, []);
+  const fetchData = async () => {
+    try {
+      const res = await getMyRegistrationsApi();
+      setRegistrations(res.data.data || []);
+    } catch {
+      setError("Failed to fetch registrations");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchData(); }, []);
+
+  const handleCancel = async (regId) => {
+    if (!window.confirm("Cancel this registration? Your ticket will also be cancelled.")) return;
+    setCancelling(regId);
+    try {
+      await cancelMyRegistrationApi(regId);
+      fetchData();
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to cancel registration");
+    } finally {
+      setCancelling(null);
+    }
+  };
 
   const filtered = activeFilter === "All"
     ? registrations
@@ -51,20 +64,18 @@ const MyRegistrations = () => {
 
   const counts = {
     All: registrations.length,
-    PENDING: registrations.filter((r) => r.status === "PENDING").length,
-    APPROVED: registrations.filter((r) => r.status === "APPROVED").length,
-    REJECTED: registrations.filter((r) => r.status === "REJECTED").length,
+    pending: registrations.filter((r) => r.status === "pending").length,
+    confirmed: registrations.filter((r) => r.status === "confirmed").length,
+    cancelled: registrations.filter((r) => r.status === "cancelled").length,
   };
 
   if (loading) return <Loader />;
 
   return (
     <div style={{ minHeight: "100vh", background: "#f8fafc" }}>
-      {/* Header banner */}
       <div style={{
         background: "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)",
-        padding: "40px 24px 36px",
-        color: "#fff",
+        padding: "40px 24px 36px", color: "#fff",
       }}>
         <div style={{ maxWidth: 900, margin: "0 auto" }}>
           <h1 style={{ fontSize: 28, fontWeight: 900, margin: "0 0 6px", letterSpacing: "-0.3px" }}>
@@ -81,7 +92,7 @@ const MyRegistrations = () => {
 
         {/* Stats row */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 28 }}>
-          {["PENDING", "APPROVED", "REJECTED"].map((s) => {
+          {["pending", "confirmed", "cancelled"].map((s) => {
             const cfg = STATUS_CONFIG[s];
             return (
               <div key={s} style={{
@@ -118,23 +129,20 @@ const MyRegistrations = () => {
         {filtered.length === 0 ? (
           <div style={{
             textAlign: "center", padding: "64px 24px",
-            background: "#fff", borderRadius: 16,
-            border: "1px dashed #d1d5db",
+            background: "#fff", borderRadius: 16, border: "1px dashed #d1d5db",
           }}>
             <div style={{ fontSize: 48, marginBottom: 12 }}>📋</div>
             <p style={{ fontWeight: 700, fontSize: 16, color: "#1e293b", marginBottom: 6 }}>
-              {activeFilter === "All" ? "No registrations yet" : `No ${STATUS_CONFIG[activeFilter].label.toLowerCase()} registrations`}
+              {activeFilter === "All" ? "No registrations yet" : `No ${STATUS_CONFIG[activeFilter]?.label.toLowerCase()} registrations`}
             </p>
             <p style={{ fontSize: 14, color: "#64748b" }}>
-              {activeFilter === "All"
-                ? "Browse events and register to see them here."
-                : "Try a different filter."}
+              {activeFilter === "All" ? "Browse events and register to see them here." : "Try a different filter."}
             </p>
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             {filtered.map((reg) => {
-              const cfg = STATUS_CONFIG[reg.status] || STATUS_CONFIG.PENDING;
+              const cfg = STATUS_CONFIG[reg.status] || STATUS_CONFIG.pending;
               const startDate = reg.eventId?.schedule?.startDateTime
                 ? new Date(reg.eventId.schedule.startDateTime)
                 : null;
@@ -148,7 +156,6 @@ const MyRegistrations = () => {
                   overflow: "hidden",
                 }}>
                   <div style={{ padding: "18px 22px", display: "flex", gap: 16, alignItems: "flex-start" }}>
-                    {/* Date block */}
                     {startDate && (
                       <div style={{
                         minWidth: 52, textAlign: "center",
@@ -164,7 +171,6 @@ const MyRegistrations = () => {
                       </div>
                     )}
 
-                    {/* Content */}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 8 }}>
                         <h3 style={{ fontSize: 16, fontWeight: 800, color: "#1e293b", margin: 0, lineHeight: 1.3 }}>
@@ -173,7 +179,7 @@ const MyRegistrations = () => {
                         <StatusBadge status={reg.status} />
                       </div>
 
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 20px" }}>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 20px", marginBottom: 10 }}>
                         {reg.eventId?.venue?.name && (
                           <span style={{ fontSize: 13, color: "#64748b", display: "flex", alignItems: "center", gap: 5 }}>
                             <span>📍</span>{reg.eventId.venue.name}{reg.eventId.venue.city ? `, ${reg.eventId.venue.city}` : ""}
@@ -191,9 +197,23 @@ const MyRegistrations = () => {
                       </div>
 
                       {reg.note && (
-                        <p style={{ fontSize: 13, color: "#64748b", marginTop: 8, padding: "8px 12px", background: "#f8fafc", borderRadius: 8, margin: "8px 0 0" }}>
+                        <p style={{ fontSize: 13, color: "#64748b", padding: "8px 12px", background: "#f8fafc", borderRadius: 8, margin: "0 0 10px" }}>
                           💬 {reg.note}
                         </p>
+                      )}
+
+                      {reg.status === "confirmed" && (
+                        <button
+                          onClick={() => handleCancel(reg._id)}
+                          disabled={cancelling === reg._id}
+                          style={{
+                            padding: "6px 14px", borderRadius: 8, border: "1px solid #ef4444",
+                            background: "#fff", color: "#991b1b", fontSize: 12, fontWeight: 700,
+                            cursor: "pointer",
+                          }}
+                        >
+                          {cancelling === reg._id ? "Cancelling..." : "Cancel Registration"}
+                        </button>
                       )}
                     </div>
                   </div>

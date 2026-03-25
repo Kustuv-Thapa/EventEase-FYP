@@ -1,6 +1,6 @@
 import { createContext, useEffect, useState } from "react";
 import { getToken, removeToken, setToken } from "../utils/token";
-import { loginUserApi, registerUserApi, getProfileApi } from "../api/authApi";
+import { loginUserApi, registerUserApi, getProfileApi, logoutApi } from "../api/authApi";
 
 export const AuthContext = createContext();
 
@@ -9,7 +9,12 @@ export const AuthProvider = ({ children }) => {
   const [token, setAuthToken] = useState(getToken());
   const [loading, setLoading] = useState(true);
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await logoutApi();
+    } catch {
+      // Ignore errors — still clear client-side session
+    }
     removeToken();
     setAuthToken(null);
     setUser(null);

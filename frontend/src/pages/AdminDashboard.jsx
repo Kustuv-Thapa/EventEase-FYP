@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
 import { getAdminBookingsApi, approveVenueBookingApi, rejectVenueBookingApi } from "../api/venueApi";
-import { getAdminRegistrationsApi, approveRegistrationApi } from "../api/registrationApi";
-import { getAdminPendingEventsApi, adminApproveEventApi, adminRejectEventApi } from "../api/eventApi";
+import { getAdminRegistrationsApi, approveRegistrationApi, adminEventRegistrationsApi } from "../api/registrationApi";
+import { getAdminPendingEventsApi, adminApproveEventApi, adminRejectEventApi, getEventsApi } from "../api/eventApi";
 import ErrorMessage from "../components/ErrorMessage";
 import Loader from "../components/Loader";
 
 const TABS = [
-  { key: "bookings",      label: "Venue Bookings",  icon: "🏛️" },
-  { key: "registrations", label: "Registrations",   icon: "📋" },
-  { key: "events",        label: "Event Approvals", icon: "🎪" },
+  { key: "bookings",      label: "Venue Bookings",       icon: "🏛️" },
+  { key: "registrations", label: "Registrations",        icon: "📋" },
+  { key: "events",        label: "Event Approvals",      icon: "🎪" },
+  { key: "eventregs",     label: "Event Registrations",  icon: "📊" },
 ];
 
 const EmptyState = ({ icon, text }) => (
@@ -22,6 +23,10 @@ const AdminDashboard = () => {
   const [bookings, setBookings] = useState([]);
   const [registrations, setRegistrations] = useState([]);
   const [pendingEvents, setPendingEvents] = useState([]);
+  const [allEvents, setAllEvents] = useState([]);
+  const [selectedEventId, setSelectedEventId] = useState("");
+  const [eventRegs, setEventRegs] = useState(null);
+  const [eventRegsLoading, setEventRegsLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [rejectReason, setRejectReason] = useState({});
@@ -29,14 +34,16 @@ const AdminDashboard = () => {
 
   const fetchData = async () => {
     try {
-      const [bRes, rRes, eRes] = await Promise.all([
+      const [bRes, rRes, eRes, allEvRes] = await Promise.all([
         getAdminBookingsApi({ status: "pending" }),
-        getAdminRegistrationsApi({ status: "PENDING" }),
+        getAdminRegistrationsApi({ status: "pending" }),
         getAdminPendingEventsApi(),
+        getEventsApi().catch(() => ({ data: { data: { items: [] } } })),
       ]);
       setBookings(bRes.data.data || []);
       setRegistrations(rRes.data.data?.items || []);
       setPendingEvents(eRes.data.data?.items || []);
+      setAllEvents(allEvRes.data.data?.items || []);
     } catch {
       setError("Failed to load dashboard data");
     } finally {
@@ -63,6 +70,18 @@ const AdminDashboard = () => {
     catch (err) { setError(err.response?.data?.message || "Decision failed"); }
   };
 
+  const handleLoadEventRegs = async () => {
+    if (!selectedEventId) return;
+    setEventRegsLoading(true);
+    try {
+      const res = await adminEventRegistrationsApi(selectedEventId);
+      setEventRegs(res.data.data);
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to load event registrations");
+    } finally {
+      setEventRegsLoading(false);
+    }
+  };
   const handleApproveEvent = async (id) => {
     try { setError(""); await adminApproveEventApi(id); fetchData(); }
     catch (err) { setError(err.response?.data?.message || "Approval failed"); }
@@ -199,8 +218,8 @@ const AdminDashboard = () => {
                       Registered {new Date(reg.createdAt).toLocaleDateString("en-US", { dateStyle: "medium" })}
                     </div>
                     <div style={{ display: "flex", gap: 8 }}>
-                      <button onClick={() => handleRegistrationDecision(reg._id, "APPROVED")} style={{ padding: "8px 18px", borderRadius: 8, border: "none", cursor: "pointer", background: "#dcfce7", color: "#166534", fontWeight: 700, fontSize: 13 }}>✓ Approve</button>
-                      <button onClick={() => handleRegistrationDecision(reg._id, "REJECTED")} style={{ padding: "8px 18px", borderRadius: 8, border: "none", cursor: "pointer", background: "#fee2e2", color: "#991b1b", fontWeight: 700, fontSize: 13 }}>✕ Reject</button>
+                      <button onClick={() => handleRegistrationDecision(reg._id, "confirmed")} style={{ padding: "8px 18px", borderRadius: 8, border: "none", cursor: "pointer", background: "#dcfce7", color: "#166534", fontWeight: 700, fontSize: 13 }}>✓ Confirm</button>
+                      <button onClick={() => handleRegistrationDecision(reg._id, "cancelled")} style={{ padding: "8px 18px", borderRadius: 8, border: "none", cursor: "pointer", background: "#fee2e2", color: "#991b1b", fontWeight: 700, fontSize: 13 }}>✕ Cancel</button>
                     </div>
                   </div>
                 ))}
@@ -238,6 +257,93 @@ const AdminDashboard = () => {
                   </div>
                 ))}
               </div>
+        )}
+
+        {/* Event Registrations tab */}
+        {activeTab === "eventregs" && (
+          <div>
+            <div style={{ display: "flex", gap: 10, marginBottom: 24, alignItems: "center", flexWrap: "wrap" }}>
+              <select
+                value={selectedEventId}
+                onChange={(e) => { setSelectedEventId(e.target.value); setEventRegs(null); }}
+                style={{ padding: "10px 14px", borderRadius: 10, border: "1.5px solid #d1d5db", fontSize: 14, minWidth: 260 }}
+              >
+                <option value="">Select an event...</option>
+                {allEvents.map((ev) => (
+                  <option key={ev._id} value={ev._id}>{ev.title}</option>
+                ))}
+              </select>
+              <button
+                onClick={handleLoadEventRegs}
+                disabled={!selectedEventId || eventRegsLoading}
+                className="btn-primary"
+                style={{ padding: "10px 20px", fontWeight: 700 }}
+              >
+                {eventRegsLoading ? "Loading..." : "Load"}
+              </button>
+            </div>
+
+            {eventRegs && (
+              <>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 24 }}>
+                  {[
+                    { label: "Total Registered", value: eventRegs.stats.totalConfirmed, color: "#4f46e5", border: "#c7d2fe" },
+                    { label: "Checked In",        value: eventRegs.stats.totalCheckedIn, color: "#059669", border: "#6ee7b7" },
+                    { label: "Remaining",         value: eventRegs.stats.remaining,      color: "#d97706", border: "#fde68a" },
+                  ].map((s) => (
+                    <div key={s.label} style={{
+                      background: "#fff", borderRadius: 12, padding: "18px 22px",
+                      border: `1px solid ${s.border}`, borderLeft: `4px solid ${s.color}`,
+                      boxShadow: "0 1px 6px rgba(0,0,0,0.05)",
+                    }}>
+                      <div style={{ fontSize: 26, fontWeight: 900, color: s.color }}>{s.value}</div>
+                      <div style={{ fontSize: 12, color: "#64748b", fontWeight: 600, marginTop: 3 }}>{s.label}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {eventRegs.registrations.length === 0 ? (
+                  <EmptyState icon="📋" text="No registrations for this event." />
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {eventRegs.registrations.map((reg) => (
+                      <div key={reg._id} style={{
+                        background: "#fff", borderRadius: 12, border: "1px solid #e8ecf0",
+                        padding: "14px 18px", display: "flex", justifyContent: "space-between",
+                        alignItems: "center", flexWrap: "wrap", gap: 12,
+                        boxShadow: "0 1px 4px rgba(0,0,0,0.04)",
+                      }}>
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: 14, color: "#1e293b" }}>{reg.userId?.name}</div>
+                          <div style={{ fontSize: 13, color: "#64748b" }}>{reg.userId?.email}</div>
+                        </div>
+                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                          <span style={{
+                            fontSize: 12, fontWeight: 700, borderRadius: 999, padding: "3px 10px",
+                            background: reg.status === "confirmed" ? "#dcfce7" : "#fee2e2",
+                            color: reg.status === "confirmed" ? "#166534" : "#991b1b",
+                            border: `1px solid ${reg.status === "confirmed" ? "#22c55e" : "#ef4444"}`,
+                          }}>
+                            {reg.status}
+                          </span>
+                          {reg.ticketStatus && (
+                            <span style={{
+                              fontSize: 12, fontWeight: 700, borderRadius: 999, padding: "3px 10px",
+                              background: reg.ticketStatus === "USED" ? "#f1f5f9" : reg.ticketStatus === "VALID" ? "#dcfce7" : "#fee2e2",
+                              color: reg.ticketStatus === "USED" ? "#64748b" : reg.ticketStatus === "VALID" ? "#166534" : "#991b1b",
+                              border: "1px solid #d1d5db",
+                            }}>
+                              🎟 {reg.ticketStatus}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         )}
       </div>
     </div>

@@ -13,6 +13,7 @@ router.get("/venues/:venueId/availability", validateObjectId("venueId"), booking
 // User
 router.post("/", protect, validateBookingRequest, bookingController.createBooking);
 router.get("/me", protect, bookingController.getMyBookings);
+router.get("/check", protect, bookingController.checkMyBooking);
 router.patch("/:id/cancel", protect, validateObjectId(), bookingController.cancelMyBooking);
 
 // Admin

@@ -3,9 +3,13 @@ import MainLayout from "../layouts/MainLayout";
 import Home from "../pages/Home";
 import Login from "../pages/Login";
 import Register from "../pages/Register";
+import ForgotPassword from "../pages/ForgotPassword";
+import ResetPassword from "../pages/ResetPassword";
 import EventsList from "../pages/EventsList";
 import EventDetails from "../pages/EventDetails";
 import MyRegistrations from "../pages/MyRegistrations";
+import MyTickets from "../pages/MyTickets";
+import VerifyTicket from "../pages/VerifyTicket";
 import VenueList from "../pages/VenueList";
 import BookVenue from "../pages/BookVenue";
 import OrganizerEventManagement from "../pages/OrganizerEventManagement";
@@ -22,6 +26,8 @@ const AppRoutes = () => {
         <Route index element={<Home />} />
         <Route path="login" element={<Login />} />
         <Route path="register" element={<Register />} />
+        <Route path="forgot-password" element={<ForgotPassword />} />
+        <Route path="reset-password" element={<ResetPassword />} />
         <Route path="events" element={<EventsList />} />
         <Route path="events/:id" element={<EventDetails />} />
         <Route path="venues" element={<VenueList />} />
@@ -29,11 +35,13 @@ const AppRoutes = () => {
 
         <Route element={<ProtectedRoute allowedRoles={["ATTENDEE", "ORGANIZER", "ADMIN"]} />}>
           <Route path="my-registrations" element={<MyRegistrations />} />
+          <Route path="my-tickets" element={<MyTickets />} />
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={["ORGANIZER"]} />}>
           <Route path="book-venue/:venueId" element={<BookVenue />} />
           <Route path="organizer/events" element={<OrganizerEventManagement />} />
+          <Route path="verify-ticket" element={<VerifyTicket />} />
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={["ADMIN"]} />}>
