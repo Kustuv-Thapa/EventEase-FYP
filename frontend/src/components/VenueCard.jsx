@@ -7,15 +7,22 @@ const VenueCard = ({ venue }) => {
 
   return (
     <div className="venue-card">
+      {venue.image
+        ? <img src={venue.image} alt={`${venue.name} venue`} className="venue-card-image" />
+        : <div className="venue-card-placeholder">🏛️</div>
+      }
       <div className="venue-card-body">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+        <div className="venue-card-header-row">
           <h3>{venue.name}</h3>
           <span className={`badge ${venue.isActive ? "badge-approved" : "badge-rejected"}`}>
             {venue.isActive ? "Available" : "Unavailable"}
           </span>
         </div>
         <p>📍 {venue.location?.address}, {venue.location?.city}</p>
-        <p>👥 Capacity: {venue.capacity?.toLocaleString()}</p>
+        <p>👥 Capacity: <strong>{venue.capacity?.toLocaleString()}</strong></p>
+        {venue.pricePerHour && (
+          <div className="venue-card-price">💰 Rs. {venue.pricePerHour}/hr</div>
+        )}
         {venue.amenities?.length > 0 && (
           <div className="amenity-tags">
             {venue.amenities.slice(0, 4).map((a, i) => (
@@ -26,18 +33,14 @@ const VenueCard = ({ venue }) => {
             )}
           </div>
         )}
-        {user?.role === "ORGANIZER" && venue.isActive && (
-          <div style={{ marginTop: 14 }}>
-            <Link
-              to={`/book-venue/${venue._id}`}
-              className="btn-primary"
-              style={{ display: "inline-block", padding: "8px 18px", fontSize: 13, fontWeight: 700, textDecoration: "none", borderRadius: 8 }}
-            >
-              Book Venue
-            </Link>
-          </div>
-        )}
       </div>
+      {user?.role === "ORGANIZER" && venue.isActive && (
+        <div className="venue-card-footer">
+          <Link to={`/book-venue/${venue._id}`}>
+            Book Venue →
+          </Link>
+        </div>
+      )}
     </div>
   );
 };

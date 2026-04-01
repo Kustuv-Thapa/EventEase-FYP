@@ -42,7 +42,7 @@ const ImageUploader = ({ currentImage, onImageSelect, label = "Image" }) => {
             onClick={handleRemove}
             style={{
               position: "absolute", top: 6, right: 6,
-              background: "rgba(0,0,0,0.55)", color: "#fff",
+              background: "rgba(0,0,0,0.7)", color: "#fff",
               border: "none", borderRadius: "50%", width: 26, height: 26,
               cursor: "pointer", fontSize: 14, lineHeight: 1, fontWeight: 700,
             }}
@@ -62,7 +62,7 @@ const ImageUploader = ({ currentImage, onImageSelect, label = "Image" }) => {
         >
           <div style={{ fontSize: 28, marginBottom: 6 }}>🖼️</div>
           <div>Click to upload image</div>
-          <div style={{ fontSize: 11, marginTop: 4, color: "#94a3b8" }}>PNG, JPG, WEBP · max 2MB</div>
+          <div style={{ fontSize: 11, marginTop: 4, color: "var(--text-muted)" }}>PNG, JPG, WEBP · max 2MB</div>
         </div>
       )}
       <input ref={inputRef} type="file" accept="image/*" onChange={handleFile} style={{ display: "none" }} />

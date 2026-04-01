@@ -37,18 +37,58 @@ const registerForEvent = async (req, res, next) => {
     }
 
     // Atomic capacity check: increment confirmedCount only if under capacity
-    const updatedEvent = await Event.findOneAndUpdate(
-      { _id: eventId, status: "PUBLISHED", confirmedCount: { $lt: event.capacity } },
-      { $inc: { confirmedCount: 1 } },
-      { new: true }
-    );
+    // For FREE events only — PAID events confirm after payment
+    if (event.pricing?.type !== "PAID" || !event.pricing?.price) {
+      const updatedEvent = await Event.findOneAndUpdate(
+        { _id: eventId, status: "PUBLISHED", confirmedCount: { $lt: event.capacity } },
+        { $inc: { confirmedCount: 1 } },
+        { new: true }
+      );
 
-    if (!updatedEvent) {
-      res.status(400);
-      throw new Error("Event is full");
+      if (!updatedEvent) {
+        res.status(400);
+        throw new Error("Event is full");
+      }
+    } else {
+      // For PAID events, atomic capacity check (read-only, no increment yet)
+      const eventAtCapacity = await Event.findOne({
+        _id: eventId,
+        status: "PUBLISHED",
+        $expr: { $gte: ["$confirmedCount", "$capacity"] },
+      });
+      if (eventAtCapacity) {
+        res.status(400);
+        throw new Error("Event is full");
+      }
     }
 
-    // Create registration (duplicate prevented by unique index)
+    // For PAID events: create pending registration, return payment data (no ticket yet)
+    // Do NOT increment confirmedCount yet — only do that after payment succeeds
+    if (event.pricing?.type === "PAID" && event.pricing?.price > 0) {
+      let reg;
+      try {
+        reg = await Registration.create({
+          eventId,
+          userId: req.user.id,
+          status: "pending",
+        });
+      } catch (err) {
+        if (err && err.code === 11000) {
+          res.status(409);
+          return next(new Error("You are already registered for this event"));
+        }
+        throw err;
+      }
+
+      return res.status(201).json({
+        success: true,
+        message: "Registration created — complete payment to confirm",
+        requiresPayment: true,
+        data: { registration: reg },
+      });
+    }
+
+    // FREE event: auto-confirm + create ticket immediately
     let reg;
     try {
       reg = await Registration.create({
@@ -212,6 +252,7 @@ const adminDecideRegistration = async (req, res, next) => {
 
     let ticket = null;
     if (status === "confirmed") {
+      await Event.findByIdAndUpdate(updated.eventId, { $inc: { confirmedCount: 1 } });
       ticket = await createTicket({
         userId: updated.userId,
         eventId: updated.eventId,

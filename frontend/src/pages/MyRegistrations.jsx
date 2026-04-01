@@ -1,26 +1,14 @@
 import { useEffect, useState } from "react";
 import { getMyRegistrationsApi, cancelMyRegistrationApi } from "../api/registrationApi";
+import { initiateEsewaPaymentApi } from "../api/esewaApi";
 import Loader from "../components/Loader";
 import ErrorMessage from "../components/ErrorMessage";
+import EmptyState from "../components/EmptyState";
 
 const STATUS_CONFIG = {
-  pending:   { label: "Pending",   color: "#92400e", bg: "#fef3c7", border: "#f59e0b", icon: "⏳" },
-  confirmed: { label: "Confirmed", color: "#166534", bg: "#dcfce7", border: "#22c55e", icon: "✅" },
-  cancelled: { label: "Cancelled", color: "#991b1b", bg: "#fee2e2", border: "#ef4444", icon: "❌" },
-};
-
-const StatusBadge = ({ status }) => {
-  const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.pending;
-  return (
-    <span style={{
-      background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`,
-      borderRadius: 999, padding: "4px 12px", fontSize: 12, fontWeight: 700,
-      letterSpacing: "0.03em", whiteSpace: "nowrap", display: "inline-flex",
-      alignItems: "center", gap: 5,
-    }}>
-      {cfg.icon} {cfg.label}
-    </span>
-  );
+  pending:   { label: "Pending",   color: "var(--warning)",  bg: "var(--warning-light)",  border: "var(--warning)",  icon: "⏳" },
+  confirmed: { label: "Confirmed", color: "var(--success)",  bg: "var(--success-light)",  border: "var(--success)",  icon: "✅" },
+  cancelled: { label: "Cancelled", color: "var(--danger)",   bg: "var(--danger-light)",   border: "var(--danger)",   icon: "❌" },
 };
 
 const FILTERS = ["All", "pending", "confirmed", "cancelled"];
@@ -44,6 +32,37 @@ const MyRegistrations = () => {
   };
 
   useEffect(() => { fetchData(); }, []);
+
+  const [paying, setPaying] = useState(null);
+
+  const handlePayNow = async (regId) => {
+    setPaying(regId);
+    try {
+      const payRes = await initiateEsewaPaymentApi(regId);
+      const pd = payRes.data.paymentData;
+      const form = document.createElement("form");
+      form.method = "POST";
+      form.action = pd.payment_url;
+      const fields = {
+        amount: pd.amount, tax_amount: pd.tax_amount, total_amount: pd.total_amount,
+        transaction_uuid: pd.transaction_uuid, product_code: pd.product_code,
+        product_service_charge: pd.product_service_charge,
+        product_delivery_charge: pd.product_delivery_charge,
+        success_url: pd.success_url, failure_url: pd.failure_url,
+        signed_field_names: pd.signed_field_names, signature: pd.signature,
+      };
+      Object.entries(fields).forEach(([key, value]) => {
+        const input = document.createElement("input");
+        input.type = "hidden"; input.name = key; input.value = value;
+        form.appendChild(input);
+      });
+      document.body.appendChild(form);
+      form.submit();
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to initiate payment");
+      setPaying(null);
+    }
+  };
 
   const handleCancel = async (regId) => {
     if (!window.confirm("Cancel this registration? Your ticket will also be cancelled.")) return;
@@ -72,18 +91,13 @@ const MyRegistrations = () => {
   if (loading) return <Loader />;
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f8fafc" }}>
-      <div style={{
-        background: "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)",
-        padding: "40px 24px 36px", color: "#fff",
-      }}>
-        <div style={{ maxWidth: 900, margin: "0 auto" }}>
-          <h1 style={{ fontSize: 28, fontWeight: 900, margin: "0 0 6px", letterSpacing: "-0.3px" }}>
-            My Registrations
-          </h1>
-          <p style={{ fontSize: 14, opacity: 0.85, margin: 0 }}>
-            {registrations.length} registration{registrations.length !== 1 ? "s" : ""} total
-          </p>
+    <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
+      <div className="page-banner">
+        <div className="page-banner-inner" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: 12 }}>
+          <div>
+            <h1>My Registrations</h1>
+            <p>{registrations.length} registration{registrations.length !== 1 ? "s" : ""} total</p>
+          </div>
         </div>
       </div>
 
@@ -96,12 +110,12 @@ const MyRegistrations = () => {
             const cfg = STATUS_CONFIG[s];
             return (
               <div key={s} style={{
-                background: "#fff", borderRadius: 12, padding: "16px 20px",
+                background: "var(--surface)", borderRadius: 12, padding: "16px 20px",
                 border: `1px solid ${cfg.border}`, borderLeft: `4px solid ${cfg.border}`,
-                boxShadow: "0 1px 6px rgba(0,0,0,0.05)",
+                boxShadow: "var(--shadow-sm)",
               }}>
                 <div style={{ fontSize: 22, fontWeight: 900, color: cfg.color }}>{counts[s]}</div>
-                <div style={{ fontSize: 12, color: "#64748b", fontWeight: 600, marginTop: 2 }}>{cfg.label}</div>
+                <div style={{ fontSize: 12, color: "var(--text-muted)", fontWeight: 600, marginTop: 2 }}>{cfg.label}</div>
               </div>
             );
           })}
@@ -116,9 +130,9 @@ const MyRegistrations = () => {
               style={{
                 padding: "7px 16px", borderRadius: 999, border: "1.5px solid",
                 fontSize: 13, fontWeight: 600, cursor: "pointer", transition: "all 0.15s",
-                borderColor: activeFilter === f ? "var(--primary)" : "#d1d5db",
-                background: activeFilter === f ? "var(--primary)" : "#fff",
-                color: activeFilter === f ? "#fff" : "#374151",
+                borderColor: activeFilter === f ? "var(--primary)" : "var(--border)",
+                background: activeFilter === f ? "var(--primary)" : "var(--surface)",
+                color: activeFilter === f ? "#fff" : "var(--text-secondary)",
               }}
             >
               {f === "All" ? "All" : STATUS_CONFIG[f].label} ({counts[f]})
@@ -127,18 +141,11 @@ const MyRegistrations = () => {
         </div>
 
         {filtered.length === 0 ? (
-          <div style={{
-            textAlign: "center", padding: "64px 24px",
-            background: "#fff", borderRadius: 16, border: "1px dashed #d1d5db",
-          }}>
-            <div style={{ fontSize: 48, marginBottom: 12 }}>📋</div>
-            <p style={{ fontWeight: 700, fontSize: 16, color: "#1e293b", marginBottom: 6 }}>
-              {activeFilter === "All" ? "No registrations yet" : `No ${STATUS_CONFIG[activeFilter]?.label.toLowerCase()} registrations`}
-            </p>
-            <p style={{ fontSize: 14, color: "#64748b" }}>
-              {activeFilter === "All" ? "Browse events and register to see them here." : "Try a different filter."}
-            </p>
-          </div>
+          <EmptyState
+            icon="📋"
+            title={activeFilter === "All" ? "No registrations yet" : "No matching registrations"}
+            message={activeFilter === "All" ? "Browse events and register to see them here." : "Try a different filter."}
+          />
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             {filtered.map((reg) => {
@@ -149,10 +156,10 @@ const MyRegistrations = () => {
 
               return (
                 <div key={reg._id} style={{
-                  background: "#fff", borderRadius: 14,
-                  border: "1px solid #e8ecf0",
+                  background: "var(--surface)", borderRadius: 14,
+                  border: "1px solid var(--border)",
                   borderLeft: `4px solid ${cfg.border}`,
-                  boxShadow: "0 1px 6px rgba(0,0,0,0.05)",
+                  boxShadow: "var(--shadow-sm)",
                   overflow: "hidden",
                 }}>
                   <div style={{ padding: "18px 22px", display: "flex", gap: 16, alignItems: "flex-start" }}>
@@ -173,31 +180,43 @@ const MyRegistrations = () => {
 
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 8 }}>
-                        <h3 style={{ fontSize: 16, fontWeight: 800, color: "#1e293b", margin: 0, lineHeight: 1.3 }}>
-                          {reg.eventId?.title || "Event"}
+                        <h3 style={{ fontSize: 16, fontWeight: 800, color: "var(--text)", margin: 0, lineHeight: 1.3 }}>
+                          {reg.eventId?.title || "Deleted Event"}
                         </h3>
-                        <StatusBadge status={reg.status} />
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                          {!reg.eventId && (
+                            <span style={{ background: "var(--surface-raised)", color: "var(--text-secondary)", border: "1px solid var(--border)", borderRadius: 999, padding: "4px 10px", fontSize: 11, fontWeight: 700 }}>
+                              🗑 Event Deleted
+                            </span>
+                          )}
+                          {reg.eventId?.status === "CANCELLED" && (
+                            <span style={{ background: "var(--danger-light)", color: "var(--danger)", border: "1px solid var(--danger)", borderRadius: 999, padding: "4px 10px", fontSize: 11, fontWeight: 700 }}>
+                              🚫 Event Cancelled
+                            </span>
+                          )}
+                          <span className={`badge badge-${reg.status}`}>{cfg.icon} {cfg.label}</span>
+                        </div>
                       </div>
 
                       <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 20px", marginBottom: 10 }}>
                         {reg.eventId?.venue?.name && (
-                          <span style={{ fontSize: 13, color: "#64748b", display: "flex", alignItems: "center", gap: 5 }}>
+                          <span style={{ fontSize: 13, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 5 }}>
                             <span>📍</span>{reg.eventId.venue.name}{reg.eventId.venue.city ? `, ${reg.eventId.venue.city}` : ""}
                           </span>
                         )}
                         {reg.eventId?.pricing && (
-                          <span style={{ fontSize: 13, color: "#64748b", display: "flex", alignItems: "center", gap: 5 }}>
+                          <span style={{ fontSize: 13, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 5 }}>
                             <span>🎟</span>
                             {reg.eventId.pricing.type === "FREE" ? "Free" : `NPR ${reg.eventId.pricing.price?.toLocaleString()}`}
                           </span>
                         )}
-                        <span style={{ fontSize: 13, color: "#94a3b8", display: "flex", alignItems: "center", gap: 5 }}>
+                        <span style={{ fontSize: 13, color: "var(--text-faint)", display: "flex", alignItems: "center", gap: 5 }}>
                           <span>🗓</span>Registered {new Date(reg.createdAt).toLocaleDateString("en-US", { dateStyle: "medium" })}
                         </span>
                       </div>
 
                       {reg.note && (
-                        <p style={{ fontSize: 13, color: "#64748b", padding: "8px 12px", background: "#f8fafc", borderRadius: 8, margin: "0 0 10px" }}>
+                        <p style={{ fontSize: 13, color: "var(--text-muted)", padding: "8px 12px", background: "var(--bg-alt)", borderRadius: 8, margin: "0 0 10px" }}>
                           💬 {reg.note}
                         </p>
                       )}
@@ -207,12 +226,25 @@ const MyRegistrations = () => {
                           onClick={() => handleCancel(reg._id)}
                           disabled={cancelling === reg._id}
                           style={{
-                            padding: "6px 14px", borderRadius: 8, border: "1px solid #ef4444",
-                            background: "#fff", color: "#991b1b", fontSize: 12, fontWeight: 700,
+                            padding: "6px 14px", borderRadius: 8, border: "1px solid var(--danger)",
+                            background: "var(--surface)", color: "var(--danger)", fontSize: 12, fontWeight: 700,
                             cursor: "pointer",
                           }}
                         >
                           {cancelling === reg._id ? "Cancelling..." : "Cancel Registration"}
+                        </button>
+                      )}
+                      {reg.status === "pending" && reg.eventId?.pricing?.type === "PAID" && reg.eventId?.status !== "CANCELLED" && reg.eventId && (
+                        <button
+                          onClick={() => handlePayNow(reg._id)}
+                          disabled={paying === reg._id}
+                          style={{
+                            padding: "6px 14px", borderRadius: 8, border: "none",
+                            background: "linear-gradient(135deg, var(--primary), var(--primary-dark))",
+                            color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer",
+                          }}
+                        >
+                          {paying === reg._id ? "Redirecting..." : "💳 Pay Now"}
                         </button>
                       )}
                     </div>

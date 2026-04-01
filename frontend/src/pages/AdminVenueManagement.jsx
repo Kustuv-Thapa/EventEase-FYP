@@ -3,10 +3,64 @@ import { getVenuesApi, createVenueApi, updateVenueApi, deleteVenueApi, uploadVen
 import ErrorMessage from "../components/ErrorMessage";
 import Loader from "../components/Loader";
 import ImageUploader from "../components/ImageUploader";
+import EmptyState from "../components/EmptyState";
 
 const EMPTY_FORM = { name: "", capacity: "", address: "", city: "", country: "", amenities: "", image: "" };
 
-const AdminVenueManagement = () => {
+const VenueForm = ({ form, onChange, onSubmit, onCancel, submitting, title }) => (
+  <div style={{
+    background: "#fff", border: "1px solid #e0e7ff", borderRadius: "var(--radius-lg)",
+    marginBottom: 28, boxShadow: "0 4px 24px rgba(99,102,241,0.10)", overflow: "hidden",
+  }}>
+    <div style={{
+      padding: "16px 28px", background: "linear-gradient(135deg, #eef2ff, #f5f3ff)",
+      borderBottom: "1px solid #e0e7ff", display: "flex", alignItems: "center", justifyContent: "space-between",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <span style={{ fontSize: 20 }}>🏛️</span>
+        <h3 style={{ fontSize: 16, fontWeight: 800, color: "#3730a3", margin: 0 }}>{title}</h3>
+      </div>
+      <button onClick={onCancel} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18, color: "#94a3b8", padding: "2px 6px" }}>✕</button>
+    </div>
+    <form onSubmit={onSubmit} style={{ padding: "24px 28px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 24px" }}>
+        <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+          <label>Venue Name *</label>
+          <input name="name" value={form.name} onChange={onChange} required placeholder="e.g. City Convention Hall" />
+        </div>
+        <div className="form-group">
+          <label>Capacity *</label>
+          <input type="number" name="capacity" value={form.capacity} onChange={onChange} required min={1} placeholder="Max attendees" />
+        </div>
+        <div className="form-group">
+          <label>City *</label>
+          <input name="city" value={form.city} onChange={onChange} required placeholder="Kathmandu" />
+        </div>
+        <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+          <label>Address *</label>
+          <input name="address" value={form.address} onChange={onChange} required placeholder="Full street address" />
+        </div>
+        <div className="form-group">
+          <label>Country *</label>
+          <input name="country" value={form.country} onChange={onChange} required placeholder="Nepal" />
+        </div>
+        <div className="form-group">
+          <label>Amenities <span style={{ color: "var(--text-muted)", fontWeight: 400, textTransform: "none", fontSize: 11 }}>(comma-separated)</span></label>
+          <input name="amenities" value={form.amenities} onChange={onChange} placeholder="Parking, WiFi, Stage" />
+        </div>
+      </div>
+      <ImageUploader label="Venue Image" currentImage={form.image} onImageSelect={(img) => onChange({ target: { name: "image", value: img } })} />
+      <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid #e0e7ff", display: "flex", gap: 10 }}>
+        <button type="submit" className={`btn btn-primary${submitting ? " btn-loading" : ""}`} disabled={submitting}>
+          {submitting ? "Saving…" : title.startsWith("Edit") ? "Save Changes" : "Create Venue"}
+        </button>
+        <button type="button" className="btn btn-ghost" onClick={onCancel}>Cancel</button>
+      </div>
+    </form>
+  </div>
+);
+
+export default function AdminVenueManagement() {
   const [venues, setVenues] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -14,95 +68,60 @@ const AdminVenueManagement = () => {
   const [form, setForm] = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [uploadingImageFor, setUploadingImageFor] = useState(null);
-  const [editingVenue, setEditingVenue] = useState(null); // venue being edited
+  const [editingVenue, setEditingVenue] = useState(null);
+  const [filterActive, setFilterActive] = useState("ALL");
 
   const fetchVenues = async () => {
-    try {
-      const res = await getVenuesApi();
-      setVenues(res.data.data || []);
-    } catch {
-      setError("Failed to load venues");
-    } finally {
-      setLoading(false);
-    }
+    try { const res = await getVenuesApi(); setVenues(res.data.data || []); }
+    catch { setError("Failed to load venues"); }
+    finally { setLoading(false); }
   };
 
   useEffect(() => { fetchVenues(); }, []);
 
   const handleChange = (e) => setForm((p) => ({ ...p, [e.target.name]: e.target.value }));
 
+  const closeForm = () => { setShowForm(false); setEditingVenue(null); setForm(EMPTY_FORM); };
+
   const handleCreate = async (e) => {
-    e.preventDefault();
-    setError("");
-    setSubmitting(true);
+    e.preventDefault(); setError(""); setSubmitting(true);
     try {
       const res = await createVenueApi({
-        name: form.name,
-        capacity: Number(form.capacity),
+        name: form.name, capacity: Number(form.capacity),
         location: { address: form.address, city: form.city, country: form.country },
         amenities: form.amenities ? form.amenities.split(",").map((a) => a.trim()).filter(Boolean) : [],
       });
-      if (form.image && form.image.startsWith("data:image/")) {
-        await uploadVenueImageApi(res.data.data._id, form.image);
-      }
-      setForm(EMPTY_FORM);
-      setShowForm(false);
-      fetchVenues();
-    } catch (err) {
-      setError(err.response?.data?.message || "Failed to create venue");
-    } finally {
-      setSubmitting(false);
-    }
+      if (form.image?.startsWith("data:image/")) await uploadVenueImageApi(res.data.data._id, form.image);
+      closeForm(); fetchVenues();
+    } catch (err) { setError(err.response?.data?.message || "Failed to create venue"); }
+    finally { setSubmitting(false); }
   };
 
   const handleEditClick = (v) => {
     setEditingVenue(v._id);
-    setForm({
-      name: v.name || "",
-      capacity: v.capacity || "",
-      address: v.location?.address || "",
-      city: v.location?.city || "",
-      country: v.location?.country || "",
-      amenities: v.amenities?.join(", ") || "",
-      image: "",
-    });
+    setForm({ name: v.name || "", capacity: v.capacity || "", address: v.location?.address || "", city: v.location?.city || "", country: v.location?.country || "", amenities: v.amenities?.join(", ") || "", image: "" });
     setShowForm(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handleUpdate = async (e) => {
-    e.preventDefault();
-    setError("");
-    setSubmitting(true);
+    e.preventDefault(); setError(""); setSubmitting(true);
     try {
       await updateVenueApi(editingVenue, {
-        name: form.name,
-        capacity: Number(form.capacity),
+        name: form.name, capacity: Number(form.capacity),
         location: { address: form.address, city: form.city, country: form.country },
         amenities: form.amenities ? form.amenities.split(",").map((a) => a.trim()).filter(Boolean) : [],
       });
-      if (form.image && form.image.startsWith("data:image/")) {
-        await uploadVenueImageApi(editingVenue, form.image);
-      }
-      setEditingVenue(null);
-      setForm(EMPTY_FORM);
-      fetchVenues();
-    } catch (err) {
-      setError(err.response?.data?.message || "Failed to update venue");
-    } finally {
-      setSubmitting(false);
-    }
+      if (form.image?.startsWith("data:image/")) await uploadVenueImageApi(editingVenue, form.image);
+      closeForm(); fetchVenues();
+    } catch (err) { setError(err.response?.data?.message || "Failed to update venue"); }
+    finally { setSubmitting(false); }
   };
 
   const handleVenueImageUpdate = async (venueId, image) => {
-    try {
-      setError("");
-      await uploadVenueImageApi(venueId, image);
-      fetchVenues();
-    } catch (err) {
-      setError(err.response?.data?.message || "Failed to update image");
-    } finally {
-      setUploadingImageFor(null);
-    }
+    try { setError(""); await uploadVenueImageApi(venueId, image); fetchVenues(); }
+    catch (err) { setError(err.response?.data?.message || "Failed to update image"); }
+    finally { setUploadingImageFor(null); }
   };
 
   const handleDelete = async (id) => {
@@ -114,235 +133,166 @@ const AdminVenueManagement = () => {
   if (loading) return <Loader />;
 
   const active = venues.filter((v) => v.isActive).length;
+  const inactive = venues.length - active;
+
+  const filtered = filterActive === "ALL" ? venues
+    : filterActive === "ACTIVE" ? venues.filter(v => v.isActive)
+    : venues.filter(v => !v.isActive);
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f8fafc" }}>
-      {/* Header */}
-      <div style={{
-        background: "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)",
-        padding: "40px 24px 36px", color: "#fff",
-      }}>
-        <div style={{ maxWidth: 1000, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: 16 }}>
+    <div style={{ background: "var(--bg)", minHeight: "100vh" }}>
+      {/* Banner */}
+      <div className="page-banner">
+        <div className="page-banner-inner" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
           <div>
-            <h1 style={{ fontSize: 28, fontWeight: 900, margin: "0 0 6px", letterSpacing: "-0.3px" }}>
-              Venue Management
-            </h1>
-            <p style={{ fontSize: 14, opacity: 0.7, margin: 0 }}>
-              {venues.length} venue{venues.length !== 1 ? "s" : ""} · {active} active
-            </p>
+            <h1>Venue Management</h1>
+            <p>{venues.length} venue{venues.length !== 1 ? "s" : ""} · {active} active · {inactive} inactive</p>
           </div>
           <button
-            onClick={() => setShowForm((p) => !p)}
-            style={{
-              padding: "10px 22px", borderRadius: 10, border: "2px solid rgba(255,255,255,0.3)",
-              background: showForm ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.2)",
-              color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer",
-              backdropFilter: "blur(4px)",
-            }}
+            onClick={() => { if (showForm || editingVenue) { closeForm(); } else { setShowForm(true); } }}
+            className={`btn btn-sm ${(showForm || editingVenue) ? "btn-ghost" : "btn-secondary"}`}
           >
-            {showForm ? "✕ Cancel" : "+ Add Venue"}
+            {(showForm || editingVenue) ? "✕ Discard" : "+ Add Venue"}
           </button>
         </div>
       </div>
 
-      <div style={{ maxWidth: 1000, margin: "0 auto", padding: "28px 24px" }}>
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "28px 24px" }}>
         <ErrorMessage message={error} />
 
         {/* Stats */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 28 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginBottom: 28 }}>
           {[
-            { label: "Total Venues", value: venues.length,   color: "#4f46e5", border: "#c7d2fe" },
-            { label: "Active",       value: active,           color: "#059669", border: "#6ee7b7" },
-            { label: "Inactive",     value: venues.length - active, color: "#dc2626", border: "#fca5a5" },
-          ].map((s) => (
-            <div key={s.label} style={{
-              background: "#fff", borderRadius: 12, padding: "18px 22px",
-              border: `1px solid ${s.border}`, borderLeft: `4px solid ${s.color}`,
-              boxShadow: "0 1px 6px rgba(0,0,0,0.05)",
+            { label: "Total Venues", value: venues.length, color: "#6366f1", bg: "#eef2ff", border: "#c7d2fe" },
+            { label: "Active",       value: active,         color: "#16a34a", bg: "#f0fdf4", border: "#bbf7d0" },
+            { label: "Inactive",     value: inactive,       color: "#dc2626", bg: "#fff1f2", border: "#fecdd3" },
+          ].map(({ label, value, color, bg, border }) => (
+            <div key={label} style={{
+              background: "#fff", borderRadius: "var(--radius-lg)", padding: "22px 24px",
+              border: `1px solid ${border}`, borderLeft: `4px solid ${color}`,
+              boxShadow: "var(--shadow-sm)", display: "flex", alignItems: "center", gap: 16,
             }}>
-              <div style={{ fontSize: 26, fontWeight: 900, color: s.color }}>{s.value}</div>
-              <div style={{ fontSize: 12, color: "#64748b", fontWeight: 600, marginTop: 3 }}>{s.label}</div>
+              <div style={{ width: 48, height: 48, borderRadius: 12, background: bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, flexShrink: 0 }}>
+                🏛️
+              </div>
+              <div>
+                <div style={{ fontSize: 32, fontWeight: 900, color, lineHeight: 1 }}>{value}</div>
+                <div style={{ fontSize: 12, color: "var(--text-muted)", fontWeight: 600, marginTop: 3, textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</div>
+              </div>
             </div>
           ))}
         </div>
 
         {/* Create form */}
         {showForm && (
-          <div style={{
-            background: "#fff", borderRadius: 16, border: "1px solid #e8ecf0",
-            boxShadow: "0 4px 20px rgba(0,0,0,0.08)", padding: 28, marginBottom: 28,
-          }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 22 }}>
-              <div style={{ width: 4, height: 24, background: "var(--primary)", borderRadius: 4 }} />
-              <h3 style={{ fontSize: 17, fontWeight: 800, color: "#1e293b", margin: 0 }}>Add New Venue</h3>
-            </div>
-            <form onSubmit={handleCreate}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px 24px" }}>
-                <div className="form-group" style={{ gridColumn: "1 / -1" }}>
-                  <label>Venue Name *</label>
-                  <input name="name" value={form.name} onChange={handleChange} required placeholder="e.g. City Convention Hall" />
-                </div>
-                <div className="form-group">
-                  <label>Capacity *</label>
-                  <input type="number" name="capacity" value={form.capacity} onChange={handleChange} required min={1} placeholder="Max attendees" />
-                </div>
-                <div className="form-group">
-                  <label>City *</label>
-                  <input name="city" value={form.city} onChange={handleChange} required placeholder="Kathmandu" />
-                </div>
-                <div className="form-group" style={{ gridColumn: "1 / -1" }}>
-                  <label>Address *</label>
-                  <input name="address" value={form.address} onChange={handleChange} required placeholder="Full street address" />
-                </div>
-                <div className="form-group">
-                  <label>Country *</label>
-                  <input name="country" value={form.country} onChange={handleChange} required placeholder="Nepal" />
-                </div>
-                <div className="form-group">
-                  <label>Amenities <span style={{ color: "#94a3b8", fontWeight: 400, textTransform: "none" }}>(comma-separated)</span></label>
-                  <input name="amenities" value={form.amenities} onChange={handleChange} placeholder="Parking, WiFi, Stage" />
-                </div>
-                <div style={{ gridColumn: "1 / -1" }}>
-                  <ImageUploader label="Venue Image" currentImage={form.image} onImageSelect={(img) => setForm((p) => ({ ...p, image: img }))} />
-                </div>
-              </div>
-              <div style={{ marginTop: 22, display: "flex", gap: 10 }}>
-                <button type="submit" className="btn-primary" disabled={submitting} style={{ padding: "10px 24px", fontWeight: 700 }}>
-                  {submitting ? "Creating..." : "Create Venue"}
-                </button>
-                <button type="button" onClick={() => setShowForm(false)} style={{ padding: "10px 20px" }}>Cancel</button>
-              </div>
-            </form>
-          </div>
+          <VenueForm form={form} onChange={handleChange} onSubmit={handleCreate} onCancel={closeForm} submitting={submitting} title="Add New Venue" />
         )}
 
         {/* Edit form */}
         {editingVenue && (
-          <div style={{
-            background: "#fff", borderRadius: 16, border: "1px solid #fde68a",
-            boxShadow: "0 4px 20px rgba(0,0,0,0.08)", padding: 28, marginBottom: 28,
-          }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 22 }}>
-              <div style={{ width: 4, height: 24, background: "#f59e0b", borderRadius: 4 }} />
-              <h3 style={{ fontSize: 17, fontWeight: 800, color: "#1e293b", margin: 0 }}>Edit Venue</h3>
-            </div>
-            <form onSubmit={handleUpdate}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px 24px" }}>
-                <div className="form-group" style={{ gridColumn: "1 / -1" }}>
-                  <label>Venue Name *</label>
-                  <input name="name" value={form.name} onChange={handleChange} required placeholder="e.g. City Convention Hall" />
-                </div>
-                <div className="form-group">
-                  <label>Capacity *</label>
-                  <input type="number" name="capacity" value={form.capacity} onChange={handleChange} required min={1} placeholder="Max attendees" />
-                </div>
-                <div className="form-group">
-                  <label>City *</label>
-                  <input name="city" value={form.city} onChange={handleChange} required placeholder="Kathmandu" />
-                </div>
-                <div className="form-group" style={{ gridColumn: "1 / -1" }}>
-                  <label>Address *</label>
-                  <input name="address" value={form.address} onChange={handleChange} required placeholder="Full street address" />
-                </div>
-                <div className="form-group">
-                  <label>Country *</label>
-                  <input name="country" value={form.country} onChange={handleChange} required placeholder="Nepal" />
-                </div>
-                <div className="form-group">
-                  <label>Amenities <span style={{ color: "#94a3b8", fontWeight: 400, textTransform: "none" }}>(comma-separated)</span></label>
-                  <input name="amenities" value={form.amenities} onChange={handleChange} placeholder="Parking, WiFi, Stage" />
-                </div>
-                <div style={{ gridColumn: "1 / -1" }}>
-                  <ImageUploader label="Replace Image (optional)" currentImage={form.image} onImageSelect={(img) => setForm((p) => ({ ...p, image: img }))} />
-                </div>
-              </div>
-              <div style={{ marginTop: 22, display: "flex", gap: 10 }}>
-                <button type="submit" className="btn-primary" disabled={submitting} style={{ padding: "10px 24px", fontWeight: 700, background: "#f59e0b", borderColor: "#f59e0b" }}>
-                  {submitting ? "Saving..." : "Save Changes"}
-                </button>
-                <button type="button" onClick={() => { setEditingVenue(null); setForm(EMPTY_FORM); }} style={{ padding: "10px 20px" }}>Cancel</button>
-              </div>
-            </form>
+          <VenueForm form={form} onChange={handleChange} onSubmit={handleUpdate} onCancel={closeForm} submitting={submitting} title="Edit Venue" />
+        )}
+
+        {/* Filter pills */}
+        {venues.length > 0 && (
+          <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+            {[
+              { key: "ALL",      label: "All",      count: venues.length },
+              { key: "ACTIVE",   label: "Active",   count: active },
+              { key: "INACTIVE", label: "Inactive", count: inactive },
+            ].map(({ key, label, count }) => (
+              <button key={key} onClick={() => setFilterActive(key)} style={{
+                padding: "6px 14px", borderRadius: 999, fontSize: 13, fontWeight: 600,
+                cursor: "pointer", transition: "all 0.15s",
+                border: filterActive === key ? "1.5px solid #6366f1" : "1.5px solid var(--border)",
+                background: filterActive === key ? "#eef2ff" : "#fff",
+                color: filterActive === key ? "#4338ca" : "var(--text-secondary)",
+              }}>
+                {label} <span style={{ opacity: 0.7, fontWeight: 500 }}>({count})</span>
+              </button>
+            ))}
           </div>
         )}
 
-        {/* Venue list */}
-        {venues.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "64px 24px", background: "#fff", borderRadius: 16, border: "1px dashed #d1d5db" }}>
-            <div style={{ fontSize: 48, marginBottom: 12 }}>🏛️</div>
-            <p style={{ fontWeight: 700, fontSize: 16, color: "#1e293b", marginBottom: 6 }}>No venues yet</p>
-            <p style={{ fontSize: 14, color: "#64748b" }}>Add your first venue to get started.</p>
-          </div>
+        {/* Venues grid */}
+        {filtered.length === 0 ? (
+          <EmptyState icon="🏛️" title="No venues" message="Add your first venue to get started." />
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 16 }}>
-            {venues.map((v) => (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 20 }}>
+            {filtered.map((v) => (
               <div key={v._id} style={{
-                background: "#fff", borderRadius: 14,
-                border: "1px solid #e8ecf0",
-                borderLeft: `4px solid ${v.isActive ? "#059669" : "#dc2626"}`,
-                boxShadow: "0 1px 6px rgba(0,0,0,0.05)",
-                overflow: "hidden",
-              }}>
-                {v.image && (
-                  <img src={v.image} alt={v.name} style={{ width: "100%", height: 140, objectFit: "cover" }} />
-                )}
-                <div style={{ padding: "18px 20px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10, gap: 8 }}>
-                    <h3 style={{ fontSize: 16, fontWeight: 800, color: "#1e293b", margin: 0, lineHeight: 1.3 }}>{v.name}</h3>
+                background: "#fff", borderRadius: "var(--radius-lg)",
+                border: `1px solid ${v.isActive ? "#bbf7d0" : "#e2e8f0"}`,
+                borderTop: `3px solid ${v.isActive ? "#22c55e" : "#94a3b8"}`,
+                boxShadow: "var(--shadow-sm)", overflow: "hidden", display: "flex", flexDirection: "column",
+                transition: "box-shadow 0.2s, transform 0.2s",
+              }}
+                onMouseEnter={e => { e.currentTarget.style.boxShadow = "var(--shadow-md)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
+                onMouseLeave={e => { e.currentTarget.style.boxShadow = "var(--shadow-sm)"; e.currentTarget.style.transform = "none"; }}
+              >
+                {/* Cover image */}
+                <div style={{ height: 150, overflow: "hidden", flexShrink: 0, position: "relative" }}>
+                  {v.image ? (
+                    <img src={v.image} alt={v.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                  ) : (
+                    <div style={{ width: "100%", height: "100%", background: "linear-gradient(135deg, #eef2ff, #f5f3ff)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 48 }}>🏛️</div>
+                  )}
+                  <div style={{ position: "absolute", top: 10, right: 10 }}>
                     <span style={{
-                      background: v.isActive ? "#d1fae5" : "#fee2e2",
-                      color: v.isActive ? "#065f46" : "#991b1b",
-                      border: `1px solid ${v.isActive ? "#6ee7b7" : "#fca5a5"}`,
-                      borderRadius: 999, padding: "3px 10px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap",
+                      background: v.isActive ? "rgba(240,253,244,0.92)" : "rgba(248,250,252,0.92)",
+                      color: v.isActive ? "#15803d" : "#64748b",
+                      border: `1px solid ${v.isActive ? "#bbf7d0" : "#e2e8f0"}`,
+                      borderRadius: 999, padding: "3px 10px 3px 7px", fontSize: 11, fontWeight: 700,
+                      display: "inline-flex", alignItems: "center", gap: 5,
+                      backdropFilter: "blur(4px)",
                     }}>
-                      {v.isActive ? "● Active" : "● Inactive"}
+                      <span style={{ width: 6, height: 6, borderRadius: "50%", background: v.isActive ? "#22c55e" : "#94a3b8", display: "inline-block" }} />
+                      {v.isActive ? "Active" : "Inactive"}
                     </span>
                   </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                    <span style={{ fontSize: 13, color: "#475569", display: "flex", gap: 7 }}>
-                      <span>📍</span>{v.location?.address}, {v.location?.city}
-                    </span>
-                    <span style={{ fontSize: 13, color: "#475569", display: "flex", gap: 7 }}>
-                      <span>👥</span>Capacity: {v.capacity?.toLocaleString()}
-                    </span>
+                </div>
+
+                {/* Body */}
+                <div style={{ padding: "16px 18px", flex: 1 }}>
+                  <h3 style={{ fontSize: 15, fontWeight: 800, color: "var(--text)", margin: "0 0 10px" }}>{v.name}</h3>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <div style={{ fontSize: 13, color: "var(--text-secondary)", display: "flex", gap: 7, alignItems: "center" }}>
+                      <span>📍</span><span>{v.location?.address}, {v.location?.city}</span>
+                    </div>
+                    <div style={{ fontSize: 13, color: "var(--text-secondary)", display: "flex", gap: 7, alignItems: "center" }}>
+                      <span>👥</span><span>{v.capacity?.toLocaleString()} capacity</span>
+                    </div>
                     {v.amenities?.length > 0 && (
-                      <span style={{ fontSize: 13, color: "#475569", display: "flex", gap: 7 }}>
-                        <span>✨</span>
-                        {v.amenities.slice(0, 3).join(", ")}{v.amenities.length > 3 ? ` +${v.amenities.length - 3} more` : ""}
-                      </span>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 4 }}>
+                        {v.amenities.slice(0, 4).map((a, i) => (
+                          <span key={i} style={{ background: "#eef2ff", color: "#4338ca", border: "1px solid #c7d2fe", borderRadius: 999, padding: "2px 8px", fontSize: 11, fontWeight: 600 }}>{a}</span>
+                        ))}
+                        {v.amenities.length > 4 && (
+                          <span style={{ background: "#f1f5f9", color: "#64748b", border: "1px solid #e2e8f0", borderRadius: 999, padding: "2px 8px", fontSize: 11, fontWeight: 600 }}>+{v.amenities.length - 4} more</span>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>
-                <div style={{ padding: "10px 20px", borderTop: "1px solid #f1f5f9", background: "#fafbfc" }}>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                    <button
-                      onClick={() => handleEditClick(v)}
-                      style={{ padding: "7px 14px", borderRadius: 8, border: "none", cursor: "pointer", background: "#fef3c7", color: "#92400e", fontWeight: 700, fontSize: 13 }}
-                    >
-                      ✏️ Edit
-                    </button>
-                    <button
-                      onClick={() => setUploadingImageFor(uploadingImageFor === v._id ? null : v._id)}
-                      style={{ padding: "7px 14px", borderRadius: 8, border: "none", cursor: "pointer", background: "#e0e7ff", color: "#3730a3", fontWeight: 700, fontSize: 13 }}
-                    >
-                      🖼️ {v.image ? "Change Image" : "Add Image"}
-                    </button>
-                    <button
-                      onClick={() => handleDelete(v._id)}
-                      style={{ padding: "7px 16px", borderRadius: 8, border: "none", cursor: "pointer", background: "#fee2e2", color: "#991b1b", fontWeight: 700, fontSize: 13 }}
-                    >
-                      🗑 Delete
-                    </button>
+
+                {/* Image uploader strip */}
+                {uploadingImageFor === v._id && (
+                  <div style={{ padding: "12px 18px", borderTop: "1px solid #e0e7ff", background: "#f8faff" }}>
+                    <ImageUploader label="" currentImage={v.image || ""} onImageSelect={(img) => img && handleVenueImageUpdate(v._id, img)} />
                   </div>
-                  {uploadingImageFor === v._id && (
-                    <div style={{ marginTop: 12 }}>
-                      <ImageUploader
-                        label=""
-                        currentImage={v.image || ""}
-                        onImageSelect={(img) => img && handleVenueImageUpdate(v._id, img)}
-                      />
-                    </div>
-                  )}
+                )}
+
+                {/* Actions */}
+                <div style={{ padding: "12px 18px", borderTop: "1px solid var(--border)", background: "#fafafa", display: "flex", gap: 8 }}>
+                  <button onClick={() => handleEditClick(v)} className="btn btn-sm btn-ghost" style={{ flex: 1 }}>✏️ Edit</button>
+                  <button
+                    onClick={() => setUploadingImageFor(uploadingImageFor === v._id ? null : v._id)}
+                    className="btn btn-sm"
+                    style={{ flex: 1, background: "#eef2ff", color: "#4338ca", border: "1px solid #c7d2fe" }}
+                  >
+                    🖼️ {uploadingImageFor === v._id ? "Close" : "Image"}
+                  </button>
+                  <button onClick={() => handleDelete(v._id)} className="btn btn-sm btn-danger" title="Delete">🗑</button>
                 </div>
               </div>
             ))}
@@ -351,6 +301,4 @@ const AdminVenueManagement = () => {
       </div>
     </div>
   );
-};
-
-export default AdminVenueManagement;
+}

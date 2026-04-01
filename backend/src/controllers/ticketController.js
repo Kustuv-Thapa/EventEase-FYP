@@ -97,17 +97,18 @@ const verifyTicket = async (req, res, next) => {
 
     const userRole = String(req.user.role || "").toUpperCase();
 
+    // Only organizers and admins can verify tickets
+    if (userRole !== "ORGANIZER" && userRole !== "ADMIN") {
+      res.status(403);
+      throw new Error("Forbidden: only organizers can verify tickets");
+    }
+
     // Organizer can verify only their own event tickets
     if (userRole === "ORGANIZER") {
       if (ticket.event.organizerId.toString() !== req.user.id) {
         res.status(403);
         throw new Error("You can verify tickets only for your own events");
       }
-    }
-
-    if (userRole !== "ORGANIZER") {
-      res.status(403);
-      throw new Error("Forbidden: only organizers can verify tickets");
     }
 
     if (ticket.status === "USED") {

@@ -18,6 +18,8 @@ import AdminVenueManagement from "../pages/AdminVenueManagement";
 import Unauthorized from "../pages/Unathorized";
 import NotFound from "../pages/NotFound";
 import ProtectedRoute from "../components/ProtectedRoute";
+import PaymentSuccess from "../pages/PaymentSuccess";
+import PaymentFailure from "../pages/PaymentFailure";
 
 const AppRoutes = () => {
   return (
@@ -32,6 +34,8 @@ const AppRoutes = () => {
         <Route path="events/:id" element={<EventDetails />} />
         <Route path="venues" element={<VenueList />} />
         <Route path="unauthorized" element={<Unauthorized />} />
+        <Route path="payment/success" element={<PaymentSuccess />} />
+        <Route path="payment/failure" element={<PaymentFailure />} />
 
         <Route element={<ProtectedRoute allowedRoles={["ATTENDEE", "ORGANIZER", "ADMIN"]} />}>
           <Route path="my-registrations" element={<MyRegistrations />} />

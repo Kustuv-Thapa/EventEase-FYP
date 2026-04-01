@@ -30,38 +30,46 @@ const ResetPassword = () => {
   };
 
   return (
-    <div className="form-container">
-      <h2>Reset Password</h2>
-      <p className="form-subtitle">Enter your new password</p>
-      <ErrorMessage message={error} />
-      <form onSubmit={handleSubmit}>
-        <div className="form-group">
-          <label>New Password</label>
-          <input
-            type="password"
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            placeholder="At least 6 characters"
-            required
-          />
+    <div className="form-page">
+      <div className="form-container">
+        <div style={{ marginBottom: 28 }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>🔒</div>
+          <h2>Set new password</h2>
+          <p className="form-subtitle">Choose a strong password for your account</p>
         </div>
-        <div className="form-group">
-          <label>Confirm Password</label>
-          <input
-            type="password"
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-            placeholder="Repeat password"
-            required
-          />
-        </div>
-        <button type="submit" className="btn-primary form-submit" disabled={loading}>
-          {loading ? "Resetting..." : "Reset Password"}
-        </button>
-      </form>
-      <p className="form-footer">
-        <Link to="/login">Back to Login</Link>
-      </p>
+
+        <ErrorMessage message={error} />
+
+        <form onSubmit={handleSubmit}>
+          <div className={`form-group${error ? ' has-error' : ''}`}>
+            <label>New Password</label>
+            <input
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="At least 6 characters"
+              required
+            />
+          </div>
+          <div className={`form-group${error ? ' has-error' : ''}`}>
+            <label>Confirm Password</label>
+            <input
+              type="password"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              placeholder="Repeat your password"
+              required
+            />
+          </div>
+          <button type="submit" className={`btn btn-primary btn-lg form-submit${loading ? ' btn-loading' : ''}`} disabled={loading}>
+            {loading ? "Resetting..." : "Reset Password →"}
+          </button>
+        </form>
+
+        <p className="form-footer" style={{ marginTop: 20 }}>
+          <Link to="/login">← Back to Login</Link>
+        </p>
+      </div>
     </div>
   );
 };

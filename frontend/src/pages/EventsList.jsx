@@ -3,6 +3,7 @@ import { getEventsApi } from "../api/eventApi";
 import EventCard from "../components/EventCard";
 import Loader from "../components/Loader";
 import ErrorMessage from "../components/ErrorMessage";
+import EmptyState from "../components/EmptyState";
 
 const EventsList = () => {
   const [events, setEvents] = useState([]);
@@ -11,17 +12,10 @@ const EventsList = () => {
   const [search, setSearch] = useState("");
 
   useEffect(() => {
-    const fetchEvents = async () => {
-      try {
-        const res = await getEventsApi();
-        setEvents(res.data.data?.items || []);
-      } catch {
-        setError("Failed to fetch events");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchEvents();
+    getEventsApi()
+      .then((res) => setEvents(res.data.data?.items || []))
+      .catch(() => setError("Failed to fetch events"))
+      .finally(() => setLoading(false));
   }, []);
 
   const filtered = events.filter(
@@ -34,43 +28,43 @@ const EventsList = () => {
   if (loading) return <Loader />;
 
   return (
-    <div className="container">
-      {/* Page header */}
-      <div style={{ marginBottom: 32 }}>
-        <h2 style={{ fontSize: 28, fontWeight: 900, color: "var(--text)", marginBottom: 4 }}>Upcoming Events</h2>
-        <p style={{ color: "var(--text-muted)", fontSize: 14 }}>
-          {filtered.length} event{filtered.length !== 1 ? "s" : ""} found
-          {search && ` for "${search}"`}
-        </p>
+    <div>
+      <div className="page-banner">
+        <div className="page-banner-inner">
+          <h1>Upcoming Events</h1>
+          <p>
+            {filtered.length} event{filtered.length !== 1 ? "s" : ""} found
+            {search && ` for "${search}"`}
+          </p>
+          <div style={{ position: "relative", maxWidth: 520, marginTop: 20 }}>
+            <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", fontSize: 16, pointerEvents: "none", opacity: 0.5 }}>🔍</span>
+            <input
+              type="text"
+              placeholder="Search by title, city or genre..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{ paddingLeft: 42, background: "rgba(255,255,255,0.1)", border: "1.5px solid rgba(255,255,255,0.15)", color: "#fff" }}
+            />
+          </div>
+        </div>
       </div>
 
-      {/* Search bar */}
-      <div style={{ marginBottom: 32, position: "relative", maxWidth: 480 }}>
-        <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", fontSize: 16, pointerEvents: "none" }}>🔍</span>
-        <input
-          type="text"
-          placeholder="Search by title, city or genre..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          style={{ paddingLeft: 40, margin: 0, width: "100%" }}
-        />
+      <div className="container" style={{ paddingTop: 32 }}>
+        <ErrorMessage message={error} />
+        {filtered.length === 0 ? (
+          <EmptyState
+            icon="🎭"
+            title="No events found"
+            message={search ? `No results for "${search}". Try a different search term.` : "Check back soon for upcoming events."}
+          />
+        ) : (
+          <div className="grid">
+            {filtered.map((event, i) => (
+              <EventCard key={event._id} event={event} index={i} />
+            ))}
+          </div>
+        )}
       </div>
-
-      <ErrorMessage message={error} />
-
-      {filtered.length === 0 ? (
-        <div style={{ textAlign: "center", padding: "64px 24px", color: "var(--text-muted)", background: "var(--surface)", borderRadius: "var(--radius)", border: "1px dashed var(--border)" }}>
-          <div style={{ fontSize: 48, marginBottom: 12 }}>🎭</div>
-          <p style={{ fontWeight: 600, fontSize: 16, marginBottom: 6 }}>No events found</p>
-          <p style={{ fontSize: 14 }}>{search ? "Try a different search term." : "Check back soon for upcoming events."}</p>
-        </div>
-      ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 24 }}>
-          {filtered.map((event, i) => (
-            <EventCard key={event._id} event={event} index={i} />
-          ))}
-        </div>
-      )}
     </div>
   );
 };

@@ -1,20 +1,24 @@
 import { Link } from "react-router-dom";
+import "../assets/styles/navbar.css";
 
 const Footer = () => (
-  <footer style={{
-    background: "#1e1b4b",
-    color: "#c7d2fe",
-    padding: "20px",
-  }}>
-    <div style={{ maxWidth: 1200, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-        <span style={{ color: "#fff", fontWeight: 800, fontSize: 16 }}>EventEase</span>
-        <span style={{ opacity: 0.4, fontSize: 12 }}>|</span>
-        {[["Events", "/events"], ["Login", "/login"], ["Register", "/register"]].map(([label, to]) => (
-          <Link key={to} to={to} style={{ color: "#c7d2fe", fontSize: 13, textDecoration: "none", opacity: 0.8 }}>{label}</Link>
-        ))}
+  <footer className="footer">
+    <div className="footer-inner">
+      <div className="footer-brand">
+        <span className="footer-brand-name">
+          <span className="footer-brand-icon">✦</span> EventEase
+        </span>
+        <div className="footer-nav">
+          {[["Events", "/events"], ["Venues", "/venues"], ["Login", "/login"]].map(([label, to]) => (
+            <Link key={to} to={to} className="footer-nav-link">
+              {label}
+            </Link>
+          ))}
+        </div>
       </div>
-      <p style={{ fontSize: 12, opacity: 0.5, margin: 0 }}>© {new Date().getFullYear()} EventEase · support@eventease.com</p>
+      <p className="footer-copy">
+        © {new Date().getFullYear()} EventEase
+      </p>
     </div>
   </footer>
 );

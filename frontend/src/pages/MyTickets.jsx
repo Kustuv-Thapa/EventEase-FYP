@@ -2,24 +2,12 @@ import { useEffect, useState } from "react";
 import { getMyTicketsApi } from "../api/ticketApi";
 import Loader from "../components/Loader";
 import ErrorMessage from "../components/ErrorMessage";
+import EmptyState from "../components/EmptyState";
 
 const STATUS_CONFIG = {
-  VALID:     { label: "Valid",      color: "#166534", bg: "#dcfce7", border: "#22c55e", icon: "✅" },
-  USED:      { label: "Used",       color: "#64748b", bg: "#f1f5f9", border: "#cbd5e1", icon: "✓" },
-  CANCELLED: { label: "Cancelled",  color: "#991b1b", bg: "#fee2e2", border: "#ef4444", icon: "🚫" },
-};
-
-const StatusBadge = ({ status }) => {
-  const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.VALID;
-  return (
-    <span style={{
-      background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`,
-      borderRadius: 999, padding: "4px 12px", fontSize: 12, fontWeight: 700,
-      display: "inline-flex", alignItems: "center", gap: 5, whiteSpace: "nowrap",
-    }}>
-      {cfg.icon} {cfg.label}
-    </span>
-  );
+  VALID:     { label: "Valid",      color: "var(--success)",  bg: "var(--success-light)",  border: "var(--success)",  icon: "✅" },
+  USED:      { label: "Used",       color: "var(--text-muted)", bg: "var(--surface-raised)", border: "var(--border)", icon: "✓" },
+  CANCELLED: { label: "Cancelled",  color: "var(--danger)",   bg: "var(--danger-light)",   border: "var(--danger)",   icon: "🚫" },
 };
 
 const downloadTicket = (ticket) => {
@@ -90,18 +78,11 @@ const MyTickets = () => {
   if (loading) return <Loader />;
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f8fafc" }}>
-      <div style={{
-        background: "linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%)",
-        padding: "40px 24px 36px", color: "#fff",
-      }}>
-        <div style={{ maxWidth: 900, margin: "0 auto" }}>
-          <h1 style={{ fontSize: 28, fontWeight: 900, margin: "0 0 6px", letterSpacing: "-0.3px" }}>
-            🎟 My Tickets
-          </h1>
-          <p style={{ fontSize: 14, opacity: 0.75, margin: 0 }}>
-            {tickets.length} ticket{tickets.length !== 1 ? "s" : ""}
-          </p>
+    <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
+      <div className="page-banner">
+        <div className="page-banner-inner">
+          <h1>🎟 My Tickets</h1>
+          <p>{tickets.length} ticket{tickets.length !== 1 ? "s" : ""}</p>
         </div>
       </div>
 
@@ -109,14 +90,11 @@ const MyTickets = () => {
         <ErrorMessage message={error} />
 
         {tickets.length === 0 ? (
-          <div style={{
-            textAlign: "center", padding: "64px 24px",
-            background: "#fff", borderRadius: 16, border: "1px dashed #d1d5db",
-          }}>
-            <div style={{ fontSize: 48, marginBottom: 12 }}>🎫</div>
-            <p style={{ fontWeight: 700, fontSize: 16, color: "#1e293b", marginBottom: 6 }}>No tickets yet</p>
-            <p style={{ fontSize: 14, color: "#64748b" }}>Register for an event to get your ticket here.</p>
-          </div>
+          <EmptyState
+            icon="🎫"
+            title="No tickets yet"
+            message="Register for an event to get your ticket here."
+          />
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             {tickets.map((ticket) => {
@@ -127,10 +105,10 @@ const MyTickets = () => {
 
               return (
                 <div key={ticket._id} style={{
-                  background: "#fff", borderRadius: 16,
-                  border: "1px solid #e8ecf0",
+                  background: "var(--surface)", borderRadius: 16,
+                  border: "1px solid var(--border)",
                   borderLeft: `4px solid ${cfg.border}`,
-                  boxShadow: "0 2px 10px rgba(0,0,0,0.06)",
+                  boxShadow: "var(--shadow-sm)",
                   overflow: "hidden",
                 }}>
                   <div style={{ padding: "20px 24px", display: "flex", gap: 20, alignItems: "flex-start", flexWrap: "wrap" }}>
@@ -151,24 +129,24 @@ const MyTickets = () => {
 
                     <div style={{ flex: 1, minWidth: 200 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 8 }}>
-                        <h3 style={{ fontSize: 17, fontWeight: 800, color: "#1e293b", margin: 0 }}>
+                        <h3 style={{ fontSize: 17, fontWeight: 800, color: "var(--text)", margin: 0 }}>
                           {event?.title || "Event"}
                         </h3>
-                        <StatusBadge status={ticket.status} />
+                        <span className={`badge badge-${ticket.status?.toLowerCase()}`}>{cfg.icon} {cfg.label}</span>
                       </div>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 20px", marginBottom: 10 }}>
                         {event?.venue?.name && (
-                          <span style={{ fontSize: 13, color: "#64748b", display: "flex", gap: 5 }}>
+                          <span style={{ fontSize: 13, color: "var(--text-muted)", display: "flex", gap: 5 }}>
                             📍 {event.venue.name}{event.venue.city ? `, ${event.venue.city}` : ""}
                           </span>
                         )}
                         {startDate && (
-                          <span style={{ fontSize: 13, color: "#64748b", display: "flex", gap: 5 }}>
+                          <span style={{ fontSize: 13, color: "var(--text-muted)", display: "flex", gap: 5 }}>
                             🕐 {startDate.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}
                           </span>
                         )}
                       </div>
-                      <div style={{ fontSize: 11, color: "#94a3b8", fontFamily: "monospace", letterSpacing: "0.05em" }}>
+                      <div style={{ fontSize: 11, color: "var(--text-faint)", fontFamily: "monospace", letterSpacing: "0.05em" }}>
                         ID: {ticket.ticketId}
                       </div>
                     </div>
@@ -178,9 +156,9 @@ const MyTickets = () => {
                         onClick={() => setExpandedQr(isExpanded ? null : ticket._id)}
                         style={{
                           padding: "8px 16px", borderRadius: 10, border: "1.5px solid",
-                          borderColor: isExpanded ? "#4f46e5" : "#d1d5db",
-                          background: isExpanded ? "#eef2ff" : "#fff",
-                          color: isExpanded ? "#4f46e5" : "#374151",
+                          borderColor: isExpanded ? "var(--primary)" : "var(--border)",
+                          background: isExpanded ? "var(--primary-light)" : "var(--surface)",
+                          color: isExpanded ? "var(--primary)" : "var(--text-secondary)",
                           fontWeight: 700, fontSize: 13, cursor: "pointer",
                           whiteSpace: "nowrap",
                         }}
@@ -191,8 +169,8 @@ const MyTickets = () => {
                         <button
                           onClick={() => downloadTicket(ticket)}
                           style={{
-                            padding: "8px 16px", borderRadius: 10, border: "1.5px solid #22c55e",
-                            background: "#dcfce7", color: "#166534",
+                            padding: "8px 16px", borderRadius: 10, border: "1.5px solid var(--success)",
+                            background: "var(--success-light)", color: "var(--success)",
                             fontWeight: 700, fontSize: 13, cursor: "pointer",
                             whiteSpace: "nowrap",
                           }}
@@ -205,8 +183,8 @@ const MyTickets = () => {
 
                   {isExpanded && (
                     <div style={{
-                      borderTop: "1px solid #f1f5f9", padding: "24px",
-                      background: "#fafbfc",
+                      borderTop: "1px solid var(--border)", padding: "24px",
+                      background: "var(--surface)",
                       display: "flex", flexDirection: "column", alignItems: "center", gap: 12,
                     }}>
                       {ticket.status !== "VALID" && (
@@ -223,12 +201,12 @@ const MyTickets = () => {
                         alt="QR Code"
                         style={{
                           width: 200, height: 200, borderRadius: 12,
-                          border: "2px solid #e8ecf0",
+                          border: "2px solid var(--border)",
                           opacity: ticket.status !== "VALID" ? 0.4 : 1,
                           filter: ticket.status !== "VALID" ? "grayscale(1)" : "none",
                         }}
                       />
-                      <p style={{ fontSize: 12, color: "#94a3b8", margin: 0, textAlign: "center" }}>
+                      <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0, textAlign: "center" }}>
                         Show this QR code at the event entrance
                       </p>
                     </div>

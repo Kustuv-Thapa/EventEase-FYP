@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useLocation } from "react-router-dom";
 import useAuth from "../hooks/useAuth";
 import { validateLoginForm } from "../utils/validators";
 import ErrorMessage from "../components/ErrorMessage";
@@ -8,6 +8,8 @@ import "../assets/styles/forms.css";
 const Login = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const successMsg = location.state?.message || "";
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [errors, setErrors] = useState({});
   const [serverError, setServerError] = useState("");
@@ -31,31 +33,42 @@ const Login = () => {
   };
 
   return (
-    <div className="form-container">
-      <h2>Welcome back</h2>
-      <p className="form-subtitle">Sign in to your account</p>
-      <ErrorMessage message={serverError} />
-      <form onSubmit={handleSubmit} autoComplete="off">
-        <div className="form-group">
-          <label>Email</label>
-          <input type="email" name="email" placeholder="you@example.com" onChange={handleChange} autoComplete="new-password" />
-          {errors.email && <p className="error">{errors.email}</p>}
+    <div className="form-page">
+      <div className="form-container">
+        <div style={{ marginBottom: 28 }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>👋</div>
+          <h2>Welcome back</h2>
+          <p className="form-subtitle">Sign in to your EventEase account</p>
         </div>
-        <div className="form-group">
-          <label>Password</label>
-          <input type="password" name="password" placeholder="Password" onChange={handleChange} autoComplete="new-password" />
-          {errors.password && <p className="error">{errors.password}</p>}
-        </div>
-        <button type="submit" className="btn-primary form-submit" disabled={loading}>
-          {loading ? "Signing in..." : "Sign In"}
-        </button>
-      </form>
-      <p className="form-footer">
-        <Link to="/forgot-password" style={{ fontSize: 13, color: "var(--primary)" }}>Forgot Password?</Link>
-      </p>
-      <p className="form-footer">
-        Don't have an account? <Link to="/register">Register</Link>
-      </p>
+
+        {successMsg && (
+          <div className="alert alert-success" style={{ marginBottom: 20 }}>{successMsg}</div>
+        )}
+        <ErrorMessage message={serverError} />
+
+        <form onSubmit={handleSubmit} autoComplete="off">
+          <div className={`form-group${errors.email ? ' has-error' : ''}`}>
+            <label>Email</label>
+            <input type="email" name="email" placeholder="you@example.com" onChange={handleChange} autoComplete="new-password" />
+            {errors.email && <p className="error">{errors.email}</p>}
+          </div>
+          <div className={`form-group${errors.password ? ' has-error' : ''}`}>
+            <label>Password</label>
+            <input type="password" name="password" placeholder="Your password" onChange={handleChange} autoComplete="new-password" />
+            {errors.password && <p className="error">{errors.password}</p>}
+          </div>
+          <button type="submit" className={`btn btn-primary btn-lg form-submit${loading ? ' btn-loading' : ''}`} disabled={loading}>
+            {loading ? "Signing in…" : "Sign In →"}
+          </button>
+        </form>
+
+        <p className="form-footer" style={{ marginTop: 16 }}>
+          <Link to="/forgot-password">Forgot password?</Link>
+        </p>
+        <p className="form-footer">
+          No account? <Link to="/register">Create one free</Link>
+        </p>
+      </div>
     </div>
   );
 };

@@ -1,51 +1,138 @@
+.form-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  background: linear-gradient(135deg, #eef2ff 0%, #f0f9ff 50%, #faf5ff 100%);
+}
+
 .form-container {
+  width: 100%;
   max-width: 460px;
-  margin: 48px auto;
   background: var(--surface);
-  padding: 36px;
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-lg);
-  border: 1px solid var(--border);
+  padding: 40px;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+  border: 1px solid #e0e7ff;
 }
 
 .form-container h2 {
-  font-size: 22px;
-  font-weight: 800;
-  margin-bottom: 6px;
+  font-size: 24px;
+  font-weight: 900;
+  color: var(--text);
+  margin-bottom: 4px;
+  letter-spacing: -0.4px;
 }
 
 .form-container .form-subtitle {
   color: var(--text-muted);
   font-size: 14px;
-  margin-bottom: 24px;
+  margin-bottom: 28px;
 }
 
-.form-group {
-  margin-bottom: 18px;
-}
+.form-group { margin-bottom: 18px; }
 
 .form-group label {
   display: block;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 700;
   color: var(--text-muted);
   margin-bottom: 6px;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
 }
 
 .form-footer {
-  margin-top: 20px;
+  margin-top: 18px;
   text-align: center;
   font-size: 14px;
   color: var(--text-muted);
 }
+.form-footer a { color: var(--primary); font-weight: 600; }
 
 .form-submit {
   width: 100%;
   padding: 12px;
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 700;
   margin-top: 8px;
   justify-content: center;
+  border-radius: 10px;
+}
+
+/* Role selector */
+.role-selector {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.role-option {
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: center;
+  background: var(--bg);
+}
+.role-option:hover { border-color: var(--primary); background: var(--primary-light); }
+.role-option.selected {
+  border-color: var(--primary);
+  background: var(--primary-light);
+  box-shadow: 0 0 0 3px var(--primary-glow);
+}
+.role-option .role-icon { font-size: 26px; margin-bottom: 6px; }
+.role-option .role-label { font-size: 13px; font-weight: 800; color: var(--text); }
+.role-option .role-desc { font-size: 11px; color: var(--text-muted); margin-top: 2px; line-height: 1.4; }
+
+/* Validation error states */
+.form-group.has-error input,
+.form-group.has-error textarea,
+.form-group.has-error select {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12);
+}
+
+.form-group.has-error .error {
+  display: block;
+}
+
+/* Icon + input wrapper */
+.input-icon-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-icon-wrap .icon {
+  position: absolute;
+  left: 12px;
+  color: var(--text-muted);
+  pointer-events: none;
+  font-size: 16px;
+}
+
+.input-icon-wrap input {
+  padding-left: 38px;
+}
+
+/* Form divider (e.g. "or" separator on auth pages) */
+.form-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.form-divider::before,
+.form-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
 }

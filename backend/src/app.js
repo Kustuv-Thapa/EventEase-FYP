@@ -8,6 +8,7 @@ const registrationRoutes = require("./routes/registrationRoutes");
 const venueRoutes = require("./routes/venueRoutes");
 const bookingRoutes = require("./routes/bookingRoutes");
 const ticketRoutes = require("./routes/ticketRoutes");
+const esewaRoutes = require("./routes/esewaRoutes");  
 
 const notFound = require("./middlewares/notFound");
 const errorHandler = require("./middlewares/errorHandler");
@@ -15,7 +16,10 @@ const errorHandler = require("./middlewares/errorHandler");
 const app = express();
 
 // Core middlewares
-app.use(cors());
+app.use(cors({
+  origin: process.env.NODE_ENV === "production" ? process.env.FRONTEND_URL : "*",
+  credentials: true,
+}));
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true, limit: "5mb" }));
 
@@ -36,6 +40,7 @@ app.use("/api/registrations", registrationRoutes);
 app.use("/api/venues", venueRoutes);
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/tickets", ticketRoutes);
+app.use("/api/esewa", esewaRoutes);  
 
 // 404 handler
 app.use(notFound);

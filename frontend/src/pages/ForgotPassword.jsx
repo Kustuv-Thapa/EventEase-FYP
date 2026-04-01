@@ -25,35 +25,40 @@ const ForgotPassword = () => {
   };
 
   return (
-    <div className="form-container">
-      <h2>Forgot Password</h2>
-      <p className="form-subtitle">Enter your email to receive a reset link</p>
-      <ErrorMessage message={error} />
-      {message && (
-        <div style={{ background: "#dcfce7", color: "#166534", border: "1px solid #22c55e", borderRadius: 8, padding: "12px 16px", marginBottom: 16, fontSize: 14 }}>
-          {message}
+    <div className="form-page">
+      <div className="form-container">
+        <div style={{ marginBottom: 28 }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>🔑</div>
+          <h2>Forgot password?</h2>
+          <p className="form-subtitle">Enter your email and we'll send a reset link</p>
         </div>
-      )}
-      {!message && (
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label>Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              required
-            />
-          </div>
-          <button type="submit" className="btn-primary form-submit" disabled={loading}>
-            {loading ? "Sending..." : "Send Reset Link"}
-          </button>
-        </form>
-      )}
-      <p className="form-footer">
-        <Link to="/login">Back to Login</Link>
-      </p>
+
+        <ErrorMessage message={error} />
+
+        {message ? (
+          <div className="alert alert-success">{message}</div>
+        ) : (
+          <form onSubmit={handleSubmit}>
+            <div className="form-group">
+              <label>Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                required
+              />
+            </div>
+            <button type="submit" className={`btn btn-primary btn-lg form-submit${loading ? ' btn-loading' : ''}`} disabled={loading}>
+              {loading ? "Sending..." : "Send Reset Link →"}
+            </button>
+          </form>
+        )}
+
+        <p className="form-footer" style={{ marginTop: 20 }}>
+          <Link to="/login">← Back to Login</Link>
+        </p>
+      </div>
     </div>
   );
 };

@@ -144,6 +144,16 @@ const deleteEvent = async (req, res, next) => {
     if (!event) { res.status(404); throw new Error("Event not found"); }
     if (!ensureCanModifyEvent(req.user, event)) { res.status(403); throw new Error("Forbidden"); }
 
+    // Cascade: cancel registrations and tickets before deleting
+    await Registration.updateMany(
+      { eventId: event._id, status: { $in: ["pending", "confirmed"] } },
+      { $set: { status: "cancelled" } }
+    );
+    await Ticket.updateMany(
+      { event: event._id, status: "VALID" },
+      { $set: { status: "CANCELLED" } }
+    );
+
     await event.deleteOne();
     res.status(200).json({ success: true, message: "Event deleted" });
   } catch (err) {

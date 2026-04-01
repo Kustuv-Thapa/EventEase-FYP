@@ -1,3 +1,4 @@
+/* ── Event Card ── */
 .event-card {
   background: var(--surface);
   border-radius: var(--radius);
@@ -6,56 +7,247 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  transition: box-shadow 0.2s, transform 0.2s;
+  transition: box-shadow 220ms var(--ease-standard), transform 220ms var(--ease-standard);
+  cursor: default;
 }
-.event-card:hover { box-shadow: var(--shadow-lg); transform: translateY(-3px); }
+.event-card:hover {
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-5px);
+}
 
-.event-card-body { padding: 20px; flex: 1; }
-.event-card-body h3 { font-size: 17px; font-weight: 700; margin-bottom: 8px; color: var(--text); }
-.event-card-body p  { font-size: 13px; color: var(--text-muted); margin-bottom: 6px; }
+/* Event card header: relative container for image or gradient fallback.
+ * When using an <img>, always provide a descriptive alt attribute, e.g.:
+ *   <img src={event.image} alt={`${event.title} cover`} />
+ * When no image is available, apply one of the .event-card-gradient-[n] classes. */
+.event-card-header {
+  position: relative;
+  height: 180px;
+  overflow: hidden;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+/* Image inside the header fills the container */
+.event-card-header img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Absolute badge row overlaid on the header (genre + price badges) */
+.event-card-overlay-badges {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* Gradient fallback headers — used when no cover image is available.
+ * Apply one of these classes to .event-card-header instead of an <img>. */
+.event-card-gradient-1 {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+.event-card-gradient-2 {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+.event-card-gradient-3 {
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+}
+.event-card-gradient-4 {
+  background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+}
+
+/* Legacy gradient content block (kept for backward compatibility) */
+.event-card-gradient {
+  padding: 20px 20px 16px;
+  color: #fff;
+  min-height: 100px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.event-card-image {
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+  display: block;
+}
+
+.event-card-body {
+  padding: 18px 20px;
+  flex: 1;
+}
+
+.event-card-title {
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.35;
+  margin-bottom: 10px;
+  color: var(--text);
+}
+
+.event-card-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+
+.event-card-slot {
+  margin-top: 4px;
+}
 
 .event-card-meta {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin: 12px 0;
+  gap: 5px;
+  margin: 10px 0;
 }
-.event-card-meta span { font-size: 13px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
 
-.event-card-footer {
-  padding: 14px 20px;
-  border-top: 1px solid var(--border);
+.event-card-meta span {
+  font-size: 13px;
+  color: var(--text-muted);
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 7px;
 }
 
-/* Venue card */
+.event-card-footer {
+  padding: 12px 20px;
+  border-top: 1px solid var(--border-light);
+  background: #f8fafc;
+}
+
+.event-card-footer a {
+  display: block;
+  text-align: center;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  padding: 9px;
+  border-radius: 8px;
+  text-decoration: none;
+  transition: opacity 0.15s, transform 0.15s;
+  box-shadow: 0 2px 8px rgba(99,102,241,0.25);
+}
+.event-card-footer a:hover {
+  opacity: 0.92;
+  transform: translateY(-1px);
+}
+
+/* ── Venue Card ── */
 .venue-card {
   background: var(--surface);
   border-radius: var(--radius);
   border: 1px solid var(--border);
   box-shadow: var(--shadow);
   overflow: hidden;
-  transition: box-shadow 0.2s, transform 0.2s;
+  transition: box-shadow 220ms var(--ease-standard), transform 220ms var(--ease-standard);
 }
-.venue-card:hover { box-shadow: var(--shadow-lg); transform: translateY(-3px); }
+.venue-card:hover {
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-4px);
+}
 
-.venue-card-body { padding: 20px; }
-.venue-card-body h3 { font-size: 17px; font-weight: 700; margin-bottom: 10px; }
-.venue-card-body p  { font-size: 13px; color: var(--text-muted); margin-bottom: 6px; }
+/* Venue image: always include a descriptive alt attribute, e.g.:
+ *   <img src={venue.image} alt={`${venue.name} venue`} /> */
+.venue-card-image {
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+  display: block;
+}
+
+.venue-card-placeholder {
+  width: 100%;
+  height: 140px;
+  background: linear-gradient(135deg, #eef2ff, #f5f3ff);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 48px;
+}
+
+.venue-card-body {
+  padding: 18px 20px;
+}
+
+.venue-card-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 10px;
+  gap: 8px;
+}
+
+.venue-card-body h3 {
+  font-size: 17px;
+  font-weight: 800;
+  margin-bottom: 10px;
+  color: var(--text);
+  letter-spacing: -0.2px;
+}
+
+.venue-card-body p {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Price display row with icon — place inside .venue-card-body */
+.venue-card-price {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--primary);
+  margin-top: 8px;
+}
 
 .venue-card-footer {
-  padding: 14px 20px;
-  border-top: 1px solid var(--border);
+  padding: 12px 20px;
+  border-top: 1px solid var(--border-light);
+  background: #f8fafc;
 }
 
-.amenity-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.venue-card-footer a {
+  display: block;
+  text-align: center;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  padding: 9px;
+  border-radius: 8px;
+  text-decoration: none;
+  transition: opacity 0.15s, transform 0.15s;
+  box-shadow: 0 2px 8px rgba(99,102,241,0.25);
+}
+.venue-card-footer a:hover {
+  opacity: 0.92;
+  transform: translateY(-1px);
+}
+
+.amenity-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
 .amenity-tag {
-  background: var(--primary-light);
-  color: var(--primary-dark);
+  background: #eef2ff;
+  color: #4338ca;
   font-size: 11px;
-  font-weight: 600;
-  padding: 2px 8px;
+  font-weight: 700;
+  padding: 3px 9px;
   border-radius: 999px;
+  border: 1px solid #c7d2fe;
 }

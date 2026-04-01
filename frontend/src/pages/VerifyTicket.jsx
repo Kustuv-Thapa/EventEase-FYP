@@ -3,10 +3,10 @@ import { verifyTicketApi } from "../api/ticketApi";
 import ErrorMessage from "../components/ErrorMessage";
 
 const RESULT_STYLE = {
-  success: { bg: "#dcfce7", border: "#22c55e", color: "#166534", icon: "✅" },
-  used:    { bg: "#fef3c7", border: "#f59e0b", color: "#92400e", icon: "⚠️" },
-  cancelled: { bg: "#fee2e2", border: "#ef4444", color: "#991b1b", icon: "🚫" },
-  error:   { bg: "#fee2e2", border: "#ef4444", color: "#991b1b", icon: "❌" },
+  success:   { bg: "var(--success-light)",  border: "var(--success)",  color: "var(--success)",  icon: "✅" },
+  used:      { bg: "var(--warning-light)",  border: "var(--warning)",  color: "var(--warning)",  icon: "⚠️" },
+  cancelled: { bg: "var(--danger-light)",   border: "var(--danger)",   color: "var(--danger)",   icon: "🚫" },
+  error:     { bg: "var(--danger-light)",   border: "var(--danger)",   color: "var(--danger)",   icon: "❌" },
 };
 
 const getResultStyle = (result) => {
@@ -121,14 +121,11 @@ const VerifyTicket = () => {
   const style = getResultStyle(result);
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f8fafc" }}>
-      <div style={{
-        background: "linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%)",
-        padding: "40px 24px 36px", color: "#fff",
-      }}>
-        <div style={{ maxWidth: 600, margin: "0 auto" }}>
-          <h1 style={{ fontSize: 28, fontWeight: 900, margin: "0 0 6px" }}>🔍 Verify Ticket</h1>
-          <p style={{ fontSize: 14, opacity: 0.75, margin: 0 }}>Scan QR code or enter ticket ID manually</p>
+    <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
+      <div className="page-banner">
+        <div className="page-banner-inner">
+          <h1>🔍 Verify Ticket</h1>
+          <p>Scan a QR code or enter a ticket ID to check in an attendee</p>
         </div>
       </div>
 
@@ -138,27 +135,21 @@ const VerifyTicket = () => {
 
         {/* Scanner section */}
         <div style={{
-          background: "#fff", borderRadius: 16, border: "1px solid #e8ecf0",
-          boxShadow: "0 2px 10px rgba(0,0,0,0.06)", padding: 24, marginBottom: 20,
+          background: "var(--surface)", borderRadius: "var(--radius-lg)", border: "1px solid var(--border)",
+          boxShadow: "var(--shadow)", padding: 24, marginBottom: 20,
         }}>
           <div style={{ display: "flex", gap: 10, marginBottom: scannerActive ? 16 : 0 }}>
             {!scannerActive ? (
               <button
                 onClick={startScanner}
-                style={{
-                  padding: "10px 20px", borderRadius: 10, border: "1.5px solid #4f46e5",
-                  background: "#eef2ff", color: "#4f46e5", fontWeight: 700, fontSize: 14, cursor: "pointer",
-                }}
+                className="btn btn-secondary"
               >
                 📷 Start Scanner
               </button>
             ) : (
               <button
                 onClick={stopScanner}
-                style={{
-                  padding: "10px 20px", borderRadius: 10, border: "1.5px solid #ef4444",
-                  background: "#fee2e2", color: "#991b1b", fontWeight: 700, fontSize: 14, cursor: "pointer",
-                }}
+                className="btn btn-danger"
               >
                 ⏹ Stop Scanner
               </button>
@@ -172,18 +163,18 @@ const VerifyTicket = () => {
 
         {/* Manual input */}
         <div style={{
-          background: "#fff", borderRadius: 16, border: "1px solid #e8ecf0",
-          boxShadow: "0 2px 10px rgba(0,0,0,0.06)", padding: 24, marginBottom: 24,
+          background: "var(--surface)", borderRadius: "var(--radius-lg)", border: "1px solid var(--border)",
+          boxShadow: "var(--shadow)", padding: 24, marginBottom: 24,
         }}>
-          <p style={{ fontSize: 13, color: "#64748b", marginBottom: 12, fontWeight: 600 }}>Or enter ticket ID manually:</p>
+          <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 12, fontWeight: 600 }}>Or enter ticket ID manually:</p>
           <form onSubmit={handleVerify} style={{ display: "flex", gap: 10 }}>
             <input
               value={ticketId}
               onChange={(e) => setTicketId(e.target.value)}
               placeholder="Paste ticket ID (UUID)..."
               style={{
-                flex: 1, padding: "11px 16px", borderRadius: 10,
-                border: "1.5px solid #d1d5db", fontSize: 14,
+                flex: 1, padding: "11px 16px", borderRadius: "var(--radius-sm)",
+                border: "1.5px solid var(--border)", fontSize: 14,
                 fontFamily: "monospace", outline: "none",
               }}
             />
@@ -201,9 +192,9 @@ const VerifyTicket = () => {
         {/* Result */}
         {result && ticket && style && (
           <div style={{
-            background: "#fff", borderRadius: 16,
+            background: "var(--surface)", borderRadius: "var(--radius-lg)",
             border: `2px solid ${style.border}`,
-            boxShadow: "0 2px 10px rgba(0,0,0,0.06)",
+            boxShadow: "var(--shadow)",
             overflow: "hidden",
           }}>
             <div style={{
@@ -245,8 +236,8 @@ const VerifyTicket = () => {
 
 const Row = ({ label, value, mono }) => (
   <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-    <span style={{ fontSize: 13, color: "#94a3b8", fontWeight: 600, minWidth: 80 }}>{label}</span>
-    <span style={{ fontSize: 13, color: "#1e293b", fontWeight: 500, fontFamily: mono ? "monospace" : "inherit", wordBreak: "break-all" }}>
+    <span style={{ fontSize: 13, color: "var(--text-muted)", fontWeight: 600, minWidth: 80 }}>{label}</span>
+    <span style={{ fontSize: 13, color: "var(--text)", fontWeight: 500, fontFamily: mono ? "monospace" : "inherit", wordBreak: "break-all" }}>
       {value || "—"}
     </span>
   </div>
