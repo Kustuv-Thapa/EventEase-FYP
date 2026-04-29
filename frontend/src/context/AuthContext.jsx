@@ -1,6 +1,6 @@
 import { createContext, useEffect, useState } from "react";
 import { getToken, removeToken, setToken } from "../utils/token";
-import { loginUserApi, registerUserApi, getProfileApi, logoutApi } from "../api/authApi";
+import { loginUserApi, registerUserApi, verifyOtpApi, getProfileApi, logoutApi } from "../api/authApi";
 
 export const AuthContext = createContext();
 
@@ -10,11 +10,7 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   const logout = async () => {
-    try {
-      await logoutApi();
-    } catch {
-      // Ignore errors — still clear client-side session
-    }
+    try { await logoutApi(); } catch { /* ignore */ }
     removeToken();
     setAuthToken(null);
     setUser(null);
@@ -27,7 +23,7 @@ export const AuthProvider = ({ children }) => {
           const res = await getProfileApi();
           setUser(res.data.data.user);
         }
-      } catch (error) {
+      } catch {
         logout();
       } finally {
         setLoading(false);
@@ -41,31 +37,31 @@ export const AuthProvider = ({ children }) => {
     const res = await loginUserApi(formData);
     const jwt = res.data.data.token;
     const userData = res.data.data.user;
-
     setToken(jwt);
     setAuthToken(jwt);
     setUser(userData);
-
     return res;
   };
 
+  // register no longer auto-logs in — returns requiresVerification: true
   const register = async (formData) => {
     const res = await registerUserApi(formData);
     return res;
   };
 
+  // Called after OTP is verified — activates session
+  const verifyOtp = async ({ email, otp }) => {
+    const res = await verifyOtpApi({ email, otp });
+    const jwt = res.data.data.token;
+    const userData = res.data.data.user;
+    setToken(jwt);
+    setAuthToken(jwt);
+    setUser(userData);
+    return res;
+  };
+
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        token,
-        loading,
-        login,
-        register,
-        logout,
-        isAuthenticated: !!token
-      }}
-    >
+    <AuthContext.Provider value={{ user, token, loading, login, register, verifyOtp, logout, updateUser: setUser, isAuthenticated: !!token }}>
       {children}
     </AuthContext.Provider>
   );

@@ -9,9 +9,9 @@ import EventsList from "../pages/EventsList";
 import EventDetails from "../pages/EventDetails";
 import MyRegistrations from "../pages/MyRegistrations";
 import MyTickets from "../pages/MyTickets";
+import UserProfile from "../pages/UserProfile";
 import VerifyTicket from "../pages/VerifyTicket";
 import VenueList from "../pages/VenueList";
-import BookVenue from "../pages/BookVenue";
 import OrganizerEventManagement from "../pages/OrganizerEventManagement";
 import AdminDashboard from "../pages/AdminDashboard";
 import AdminVenueManagement from "../pages/AdminVenueManagement";
@@ -38,14 +38,20 @@ const AppRoutes = () => {
         <Route path="payment/failure" element={<PaymentFailure />} />
 
         <Route element={<ProtectedRoute allowedRoles={["ATTENDEE", "ORGANIZER", "ADMIN"]} />}>
+          <Route path="profile" element={<UserProfile />} />
+        </Route>
+
+        <Route element={<ProtectedRoute allowedRoles={["ATTENDEE", "ORGANIZER"]} />}>
           <Route path="my-registrations" element={<MyRegistrations />} />
           <Route path="my-tickets" element={<MyTickets />} />
         </Route>
 
-        <Route element={<ProtectedRoute allowedRoles={["ORGANIZER"]} />}>
-          <Route path="book-venue/:venueId" element={<BookVenue />} />
-          <Route path="organizer/events" element={<OrganizerEventManagement />} />
+        <Route element={<ProtectedRoute allowedRoles={["ORGANIZER", "ADMIN"]} />}>
           <Route path="verify-ticket" element={<VerifyTicket />} />
+        </Route>
+
+        <Route element={<ProtectedRoute allowedRoles={["ORGANIZER"]} />}>
+          <Route path="organizer/events" element={<OrganizerEventManagement />} />
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={["ADMIN"]} />}>

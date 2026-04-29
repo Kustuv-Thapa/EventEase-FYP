@@ -7,6 +7,7 @@ const {
   updateEvent,
   deleteEvent,
   submitEventForApproval,
+  adminListAllEvents,
   adminListPendingEvents,
   adminApproveEvent,
   adminRejectEvent,
@@ -27,6 +28,7 @@ router.get("/", getEvents);
 // Must come before /:id to avoid being caught as an id
 router.get("/mine", protect, allowRoles("ADMIN", "ORGANIZER"), getMyEvents);
 router.get("/admin/pending", protect, allowRoles("ADMIN"), adminListPendingEvents);
+router.get("/admin/all", protect, allowRoles("ADMIN"), adminListAllEvents);
 
 router.get("/:id", validateObjectId("id"), getEventById);
 

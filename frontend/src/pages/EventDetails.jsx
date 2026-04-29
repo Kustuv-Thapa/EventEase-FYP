@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { getEventByIdApi } from "../api/eventApi";
 import { registerForEventApi } from "../api/registrationApi";
-import { initiateEsewaPaymentApi } from "../api/esewaApi";
+import { initiateKhaltiPaymentApi } from "../api/khaltiApi";
 import Loader from "../components/Loader";
 import ErrorMessage from "../components/ErrorMessage";
 import useAuth from "../hooks/useAuth";
@@ -48,15 +48,8 @@ export default function EventDetails() {
       const res = await registerForEventApi(id);
       if (res.data.requiresPayment) {
         const regId = res.data.data.registration._id;
-        const payRes = await initiateEsewaPaymentApi(regId);
-        const pd = payRes.data.paymentData;
-        const form = document.createElement("form");
-        form.method = "POST";
-        form.action = pd.payment_url;
-        const fields = { amount: pd.amount, tax_amount: pd.tax_amount, total_amount: pd.total_amount, transaction_uuid: pd.transaction_uuid, product_code: pd.product_code, product_service_charge: pd.product_service_charge, product_delivery_charge: pd.product_delivery_charge, success_url: pd.success_url, failure_url: pd.failure_url, signed_field_names: pd.signed_field_names, signature: pd.signature };
-        Object.entries(fields).forEach(([key, value]) => { const input = document.createElement("input"); input.type = "hidden"; input.name = key; input.value = value; form.appendChild(input); });
-        document.body.appendChild(form);
-        form.submit();
+        const payRes = await initiateKhaltiPaymentApi(regId);
+        window.location.href = payRes.data.payment_url;
         return;
       }
       setMessage("You're registered! Your ticket has been issued.");
@@ -76,10 +69,11 @@ export default function EventDetails() {
   );
   if (!event) return <Loader />;
 
-  const remaining = event.capacity != null ? event.capacity - (event.confirmedCount ?? event.registeredCount ?? 0) : null;
+  const remaining = event.capacity != null ? Math.max(0, event.capacity - (event.confirmedCount ?? event.registeredCount ?? 0)) : null;
   const pct = remaining != null && event.capacity > 0 ? Math.round(((event.capacity - remaining) / event.capacity) * 100) : 0;
   const organizerId = event.organizerId?._id || event.organizerId;
   const isOwner = user && organizerId?.toString() === user.id;
+  const isAdmin = user?.role === "ADMIN";
   const isFree = event.pricing?.type === "FREE";
 
   return (
@@ -196,7 +190,7 @@ export default function EventDetails() {
                   <div style={{ fontWeight: 800, fontSize: 16, color: isFree ? "#16a34a" : "#4338ca" }}>
                     {isFree ? "Free Entry" : `NPR ${event.pricing?.price?.toLocaleString()}`}
                   </div>
-                  <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>{isFree ? "No payment required" : "Paid via eSewa"}</div>
+                  <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>{isFree ? "No payment required" : "Paid via Khalti"}</div>
                 </InfoCard>
 
                 <InfoCard icon="👤" label="Organizer">
@@ -248,7 +242,7 @@ export default function EventDetails() {
                 <div style={{ fontSize: 28, fontWeight: 900, color: isFree ? "#16a34a" : "#4338ca", lineHeight: 1 }}>
                   {isFree ? "Free" : `NPR ${event.pricing?.price?.toLocaleString()}`}
                 </div>
-                {!isFree && <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>per person · via eSewa</div>}
+                {!isFree && <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>per person · via Khalti</div>}
               </div>
 
               {/* Availability */}
@@ -309,6 +303,12 @@ export default function EventDetails() {
                     </Link>
                     <p style={{ fontSize: 12, color: "#94a3b8", marginTop: 12 }}>Don't have an account? <Link to="/register" style={{ color: "#6366f1", fontWeight: 600 }}>Sign up free</Link></p>
                   </div>
+                ) : isAdmin ? (
+                  <div style={{ textAlign: "center", padding: "12px 0" }}>
+                    <div style={{ width: 52, height: 52, borderRadius: "50%", background: "#f0f9ff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, margin: "0 auto 10px" }}>🛡️</div>
+                    <p style={{ color: "#0369a1", fontSize: 14, fontWeight: 700 }}>Admin View</p>
+                    <p style={{ color: "#94a3b8", fontSize: 12, marginTop: 4 }}>Admins cannot register for events</p>
+                  </div>
                 ) : isOwner ? (
                   <div style={{ textAlign: "center", padding: "12px 0" }}>
                     <div style={{ width: 52, height: 52, borderRadius: "50%", background: "#eef2ff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, margin: "0 auto 10px" }}>🎪</div>
@@ -334,7 +334,7 @@ export default function EventDetails() {
                 ) : null}
 
                 {/* Quick info below button */}
-                {!isOwner && !message && (
+                {!isOwner && !isAdmin && !message && (
                   <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 8 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "#94a3b8" }}>
                       <span>✓</span><span>Instant confirmation</span>
@@ -344,7 +344,7 @@ export default function EventDetails() {
                     </div>
                     {!isFree && (
                       <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "#94a3b8" }}>
-                        <span>✓</span><span>Secure payment via eSewa</span>
+                      <span>✓</span><span>Secure payment via Khalti</span>
                       </div>
                     )}
                   </div>

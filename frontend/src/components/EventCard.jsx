@@ -45,7 +45,7 @@ const EventCard = ({ event }) => {
           </span>
           <span>
             <span>📍</span>
-            {event.venue?.name}, {event.venue?.city}
+            {[event.venue?.name, event.venue?.city].filter(Boolean).join(", ") || "—"}
           </span>
           <span>
             <span>👤</span>

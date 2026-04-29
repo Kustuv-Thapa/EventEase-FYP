@@ -2,82 +2,55 @@ const mongoose = require("mongoose");
 const Event = require("../models/Event");
 const Registration = require("../models/Registration");
 const Ticket = require("../models/Ticket");
+const Payment = require("../models/Payment");
 const { createTicket } = require("./ticketController");
+const { sendRegistrationConfirmationEmail, sendTicketIssuedEmail, sendRegistrationCancelledEmail } = require("../utils/emailService");
 
 // POST /api/registrations/events/:eventId
-// User registers for an event — atomic capacity check via $inc on confirmedCount
+// User registers for an event — supports re-registration after cancellation
 const registerForEvent = async (req, res, next) => {
   try {
     const { eventId } = req.params;
 
-    // Ensure event exists and is published
     const event = await Event.findById(eventId);
-    if (!event) {
-      res.status(404);
-      throw new Error("Event not found");
-    }
-    if (event.status === "CANCELLED") {
-      res.status(400);
-      throw new Error("Cannot register for a cancelled event");
-    }
-    if (event.status !== "PUBLISHED") {
-      res.status(400);
-      throw new Error("You can only register for published events");
-    }
+    if (!event) { res.status(404); throw new Error("Event not found"); }
+    if (event.status === "CANCELLED") { res.status(400); throw new Error("Cannot register for a cancelled event"); }
+    if (event.status === "COMPLETED") { res.status(400); throw new Error("This event has already ended"); }
+    if (event.status !== "PUBLISHED") { res.status(400); throw new Error("You can only register for published events"); }
+    if (event.organizerId.toString() === req.user.id) { res.status(403); throw new Error("You cannot register for your own event"); }
+    if (req.user.role === "ADMIN") { res.status(403); throw new Error("Admins cannot register for events"); }
+    if (!event.capacity) { res.status(400); throw new Error("This event has no capacity set and cannot accept registrations"); }
 
-    // Organizer cannot register for their own event
-    if (event.organizerId.toString() === req.user.id) {
-      res.status(403);
-      throw new Error("You cannot register for your own event");
-    }
+    // Check for any existing registration for this user+event
+    const existingReg = await Registration.findOne({ eventId, userId: req.user.id });
 
-    if (!event.capacity) {
-      res.status(400);
-      throw new Error("This event has no capacity set and cannot accept registrations");
-    }
-
-    // Atomic capacity check: increment confirmedCount only if under capacity
-    // For FREE events only — PAID events confirm after payment
-    if (event.pricing?.type !== "PAID" || !event.pricing?.price) {
-      const updatedEvent = await Event.findOneAndUpdate(
-        { _id: eventId, status: "PUBLISHED", confirmedCount: { $lt: event.capacity } },
-        { $inc: { confirmedCount: 1 } },
-        { new: true }
-      );
-
-      if (!updatedEvent) {
-        res.status(400);
-        throw new Error("Event is full");
+    if (existingReg) {
+      if (existingReg.status === "pending" || existingReg.status === "confirmed") {
+        res.status(409);
+        throw new Error("You are already registered for this event");
       }
-    } else {
-      // For PAID events, atomic capacity check (read-only, no increment yet)
-      const eventAtCapacity = await Event.findOne({
+      // existingReg.status === "cancelled" — allow re-registration by reactivating
+    }
+
+    // ── PAID event ──
+    if (event.pricing?.type === "PAID" && event.pricing?.price > 0) {
+      const atCapacity = await Event.findOne({
         _id: eventId,
         status: "PUBLISHED",
         $expr: { $gte: ["$confirmedCount", "$capacity"] },
       });
-      if (eventAtCapacity) {
-        res.status(400);
-        throw new Error("Event is full");
-      }
-    }
+      if (atCapacity) { res.status(400); throw new Error("Event is full"); }
 
-    // For PAID events: create pending registration, return payment data (no ticket yet)
-    // Do NOT increment confirmedCount yet — only do that after payment succeeds
-    if (event.pricing?.type === "PAID" && event.pricing?.price > 0) {
       let reg;
-      try {
-        reg = await Registration.create({
-          eventId,
-          userId: req.user.id,
-          status: "pending",
-        });
-      } catch (err) {
-        if (err && err.code === 11000) {
-          res.status(409);
-          return next(new Error("You are already registered for this event"));
-        }
-        throw err;
+      if (existingReg) {
+        // Reactivate the cancelled registration
+        existingReg.status = "pending";
+        existingReg.decidedBy = null;
+        existingReg.decidedAt = null;
+        existingReg.note = "";
+        reg = await existingReg.save();
+      } else {
+        reg = await Registration.create({ eventId, userId: req.user.id, status: "pending" });
       }
 
       return res.status(201).json({
@@ -88,36 +61,108 @@ const registerForEvent = async (req, res, next) => {
       });
     }
 
-    // FREE event: auto-confirm + create ticket immediately
-    let reg;
+    // ── FREE event: atomic capacity increment + registration + ticket ──
+    const session = await mongoose.startSession();
+    let reg, ticket;
     try {
-      reg = await Registration.create({
-        eventId,
-        userId: req.user.id,
-        status: "confirmed",
+      await session.withTransaction(async () => {
+        // Atomic capacity check + increment
+        const updatedEvent = await Event.findOneAndUpdate(
+          { _id: eventId, status: "PUBLISHED", confirmedCount: { $lt: event.capacity } },
+          { $inc: { confirmedCount: 1 } },
+          { new: true, session }
+        );
+        if (!updatedEvent) { const err = new Error("Event is full"); err.statusCode = 400; throw err; }
+
+        if (existingReg) {
+          // Reactivate the cancelled registration
+          reg = await Registration.findByIdAndUpdate(
+            existingReg._id,
+            { $set: { status: "confirmed", decidedBy: null, decidedAt: null, note: "" } },
+            { new: true, session }
+          );
+        } else {
+          [reg] = await Registration.create(
+            [{ eventId, userId: req.user.id, status: "confirmed" }],
+            { session }
+          );
+        }
+
+        // Reactivate existing cancelled ticket or create a new one
+        const existingTicket = await Ticket.findOne({ registration: reg._id }).session(session);
+        if (existingTicket) {
+          await Ticket.updateOne(
+            { _id: existingTicket._id },
+            { $set: { status: "VALID" } },
+            { session }
+          );
+          ticket = { ...existingTicket.toObject(), status: "VALID" };
+        } else {
+          const { v4: uuidv4 } = require("uuid");
+          const QRCode = require("qrcode");
+          const ticketId = uuidv4();
+          const qrPayload = JSON.stringify({ ticketId, eventId: String(eventId), registrationId: String(reg._id) });
+          const qrCode = await QRCode.toDataURL(qrPayload);
+          [ticket] = await Ticket.create(
+            [{ user: req.user.id, event: eventId, registration: reg._id, ticketId, qrCode, status: "VALID" }],
+            { session }
+          );
+        }
       });
     } catch (err) {
-      // Roll back the confirmedCount increment on duplicate or other error
-      await Event.findByIdAndUpdate(eventId, { $inc: { confirmedCount: -1 } });
-      if (err && err.code === 11000) {
-        res.status(409);
-        return next(new Error("You are already registered for this event"));
+      if (err.message?.includes("Transaction numbers") || err.message?.includes("replica set")) {
+        // Fallback for non-replica-set environments
+        const updatedEvent = await Event.findOneAndUpdate(
+          { _id: eventId, status: "PUBLISHED", confirmedCount: { $lt: event.capacity } },
+          { $inc: { confirmedCount: 1 } },
+          { new: true }
+        );
+        if (!updatedEvent) { res.status(400); throw new Error("Event is full"); }
+
+        if (existingReg) {
+          reg = await Registration.findByIdAndUpdate(
+            existingReg._id,
+            { $set: { status: "confirmed", decidedBy: null, decidedAt: null, note: "" } },
+            { new: true }
+          );
+        } else {
+          try {
+            reg = await Registration.create({ eventId, userId: req.user.id, status: "confirmed" });
+          } catch (createErr) {
+            await Event.findByIdAndUpdate(eventId, { $inc: { confirmedCount: -1 } });
+            throw createErr;
+          }
+        }
+
+        const existingTicket = await Ticket.findOne({ registration: reg._id });
+        if (existingTicket) {
+          await Ticket.updateOne({ _id: existingTicket._id }, { $set: { status: "VALID" } });
+          ticket = existingTicket;
+        } else {
+          ticket = await createTicket({ userId: req.user.id, eventId, registrationId: reg._id });
+        }
+      } else {
+        if (err.statusCode) res.status(err.statusCode);
+        throw err;
       }
-      throw err;
+    } finally {
+      session.endSession();
     }
 
-    // Auto-create ticket since registration is auto-confirmed
-    const ticket = await createTicket({
-      userId: req.user.id,
-      eventId,
-      registrationId: reg._id,
+    // Send confirmation email (non-blocking)
+    const eventDate = event.schedule?.startDateTime
+      ? new Date(event.schedule.startDateTime).toLocaleString("en-US", { dateStyle: "long", timeStyle: "short" })
+      : "TBD";
+    sendRegistrationConfirmationEmail({
+      to: req.user.email,
+      name: req.user.name,
+      eventTitle: event.title,
+      eventDate,
+      eventVenue: `${event.venue?.name || ""}, ${event.venue?.city || ""}`,
+      ticketId: ticket?.ticketId,
     });
 
-    res.status(201).json({
-      success: true,
-      message: "Registration confirmed",
-      data: { registration: reg, ticket },
-    });
+    res.status(201).json({ success: true, message: "Registration confirmed", data: { registration: reg, ticket } });
   } catch (err) {
     next(err);
   }
@@ -144,35 +189,60 @@ const getMyRegistrations = async (req, res, next) => {
 };
 
 // DELETE /api/registrations/:id
-// Attendee cancels their own confirmed registration
+// Attendee cancels their own registration (confirmed or pending)
 const cancelMyRegistration = async (req, res, next) => {
   try {
     const reg = await Registration.findById(req.params.id);
-    if (!reg) {
-      res.status(404);
-      throw new Error("Registration not found");
-    }
-    if (reg.userId.toString() !== req.user.id) {
-      res.status(403);
-      throw new Error("Forbidden");
-    }
-    if (reg.status === "cancelled") {
+    if (!reg) { res.status(404); throw new Error("Registration not found"); }
+    if (reg.userId.toString() !== req.user.id) { res.status(403); throw new Error("Forbidden"); }
+    if (reg.status === "cancelled") { res.status(400); throw new Error("Registration is already cancelled"); }
+
+    const isPending = reg.status === "pending";
+    const isConfirmed = reg.status === "confirmed";
+
+    if (!isPending && !isConfirmed) {
       res.status(400);
-      throw new Error("Registration is already cancelled");
-    }
-    if (reg.status !== "confirmed") {
-      res.status(400);
-      throw new Error("Only confirmed registrations can be cancelled");
+      throw new Error("Only pending or confirmed registrations can be cancelled");
     }
 
     reg.status = "cancelled";
     await reg.save();
 
-    // Decrement confirmedCount on the event
-    await Event.findByIdAndUpdate(reg.eventId, { $inc: { confirmedCount: -1 } });
+    // Only decrement confirmedCount if the registration was confirmed (pending never incremented it)
+    if (isConfirmed) {
+      await Event.findByIdAndUpdate(reg.eventId, { $inc: { confirmedCount: -1 } });
+      await Ticket.updateOne({ registration: reg._id }, { $set: { status: "CANCELLED" } });
+      // Mark successful payment as refunded so re-registration can pay again
+      await Payment.updateMany(
+        { registrationId: reg._id, status: "success" },
+        { $set: { status: "refunded" } }
+      );
+    }
 
-    // Cancel associated ticket
-    await Ticket.updateOne({ registration: reg._id }, { $set: { status: "CANCELLED" } });
+    // For pending paid registrations: cancel any pending payment records too
+    if (isPending) {
+      await Payment.updateMany(
+        { registrationId: reg._id, status: "pending" },
+        { $set: { status: "failed" } }
+      );
+    }
+
+    // Notify attendee (non-blocking)
+    try {
+      const event = await Event.findById(reg.eventId).select("title schedule venue");
+      if (event) {
+        const eventDate = event.schedule?.startDateTime
+          ? new Date(event.schedule.startDateTime).toLocaleString("en-US", { dateStyle: "long", timeStyle: "short" })
+          : "TBD";
+        sendRegistrationCancelledEmail({
+          to: req.user.email,
+          name: req.user.name,
+          eventTitle: event.title,
+          eventDate,
+          eventVenue: `${event.venue?.name || ""}, ${event.venue?.city || ""}`,
+        });
+      }
+    } catch { /* email failure must not break the response */ }
 
     res.status(200).json({ success: true, message: "Registration cancelled", data: reg });
   } catch (err) {
@@ -252,6 +322,15 @@ const adminDecideRegistration = async (req, res, next) => {
 
     let ticket = null;
     if (status === "confirmed") {
+      // For paid events, only confirm if payment exists
+      const event = await Event.findById(updated.eventId);
+      if (event?.pricing?.type === "PAID") {
+        const paid = await Payment.findOne({ registrationId: updated._id, status: "success" });
+        if (!paid) {
+          res.status(400);
+          throw new Error("Cannot confirm a paid registration without a successful payment");
+        }
+      }
       await Event.findByIdAndUpdate(updated.eventId, { $inc: { confirmedCount: 1 } });
       ticket = await createTicket({
         userId: updated.userId,
@@ -259,6 +338,38 @@ const adminDecideRegistration = async (req, res, next) => {
         registrationId: updated._id,
       });
     }
+
+    // Notify attendee of admin decision (non-blocking)
+    try {
+      const User = require("../models/User");
+      const attendee = await User.findById(updated.userId).select("name email");
+      const eventDoc = await Event.findById(updated.eventId).select("title schedule venue");
+      if (attendee && eventDoc) {
+        const eventDate = eventDoc.schedule?.startDateTime
+          ? new Date(eventDoc.schedule.startDateTime).toLocaleString("en-US", { dateStyle: "long", timeStyle: "short" })
+          : "TBD";
+        const eventVenue = `${eventDoc.venue?.name || ""}, ${eventDoc.venue?.city || ""}`;
+        if (status === "cancelled") {
+          sendRegistrationCancelledEmail({
+            to: attendee.email,
+            name: attendee.name,
+            eventTitle: eventDoc.title,
+            eventDate,
+            eventVenue,
+            reason: updated.note || undefined,
+          });
+        } else if (status === "confirmed" && ticket) {
+          sendRegistrationConfirmationEmail({
+            to: attendee.email,
+            name: attendee.name,
+            eventTitle: eventDoc.title,
+            eventDate,
+            eventVenue,
+            ticketId: ticket.ticketId,
+          });
+        }
+      }
+    } catch { /* email failure must not break the response */ }
 
     res.status(200).json({
       success: true,

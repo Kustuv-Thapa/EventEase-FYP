@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getVenuesApi, createVenueApi, updateVenueApi, deleteVenueApi, uploadVenueImageApi } from "../api/venueApi";
+import { getAdminVenuesApi, createVenueApi, updateVenueApi, deleteVenueApi, uploadVenueImageApi } from "../api/venueApi";
 import ErrorMessage from "../components/ErrorMessage";
 import Loader from "../components/Loader";
 import ImageUploader from "../components/ImageUploader";
@@ -72,7 +72,7 @@ export default function AdminVenueManagement() {
   const [filterActive, setFilterActive] = useState("ALL");
 
   const fetchVenues = async () => {
-    try { const res = await getVenuesApi(); setVenues(res.data.data || []); }
+    try { const res = await getAdminVenuesApi(); setVenues(res.data.data || []); }
     catch { setError("Failed to load venues"); }
     finally { setLoading(false); }
   };

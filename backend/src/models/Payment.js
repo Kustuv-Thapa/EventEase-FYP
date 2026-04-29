@@ -31,7 +31,7 @@ const paymentSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["pending", "success", "failed"],
+      enum: ["pending", "success", "failed", "refunded"],
       default: "pending",
       index: true,
     },
@@ -52,8 +52,8 @@ const paymentSchema = new mongoose.Schema(
 
     method: {
       type: String,
-      enum: ["esewa"],
-      default: "esewa",
+      enum: ["khalti"],
+      default: "khalti",
     },
 
     verificationResponse: {

@@ -9,6 +9,7 @@ export const uploadEventImageApi = (id, image) => axiosInstance.patch(`/events/$
 export const deleteEventApi = (id) => axiosInstance.delete(`/events/${id}`);
 export const submitEventForApprovalApi = (id) => axiosInstance.patch(`/events/${id}/submit`);
 export const getAdminPendingEventsApi = () => axiosInstance.get("/events/admin/pending");
+export const getAdminAllEventsApi = () => axiosInstance.get("/events/admin/all");
 export const adminApproveEventApi = (id) => axiosInstance.patch(`/events/${id}/approve`);
 export const adminRejectEventApi = (id, reason) => axiosInstance.patch(`/events/${id}/reject`, { reason });
 export const updateCapacityApi = (id, capacity) => axiosInstance.patch(`/events/${id}/capacity`, { capacity });

@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { getMyEventsApi, createEventApi, updateEventApi, deleteEventApi, submitEventForApprovalApi, uploadEventImageApi, updateCapacityApi, cancelEventApi } from "../api/eventApi";
-import { getVenuesApi } from "../api/venueApi";
+import { getVenuesApi, checkVenueAvailabilityApi } from "../api/venueApi";
+import { getEventAttendeesApi } from "../api/registrationApi";
 import ErrorMessage from "../components/ErrorMessage";
 import Loader from "../components/Loader";
 import ImageUploader from "../components/ImageUploader";
@@ -13,10 +15,11 @@ const EMPTY_FORM = {
 };
 
 const STATUS = {
-  DRAFT:            { label: "Draft",    color: "#64748b", bg: "#f1f5f9", border: "#e2e8f0", dot: "#94a3b8" },
-  PENDING_APPROVAL: { label: "Pending",  color: "#b45309", bg: "#fffbeb", border: "#fde68a", dot: "#f59e0b" },
-  PUBLISHED:        { label: "Live",     color: "#15803d", bg: "#f0fdf4", border: "#bbf7d0", dot: "#22c55e" },
-  CANCELLED:        { label: "Cancelled",color: "#b91c1c", bg: "#fff1f2", border: "#fecdd3", dot: "#ef4444" },
+  DRAFT:            { label: "Draft",     color: "#64748b", bg: "#f1f5f9", border: "#e2e8f0", dot: "#94a3b8" },
+  PENDING_APPROVAL: { label: "Pending",   color: "#b45309", bg: "#fffbeb", border: "#fde68a", dot: "#f59e0b" },
+  PUBLISHED:        { label: "Live",      color: "#15803d", bg: "#f0fdf4", border: "#bbf7d0", dot: "#22c55e" },
+  CANCELLED:        { label: "Cancelled", color: "#b91c1c", bg: "#fff1f2", border: "#fecdd3", dot: "#ef4444" },
+  COMPLETED:        { label: "Completed", color: "#1d4ed8", bg: "#eff6ff", border: "#bfdbfe", dot: "#3b82f6" },
 };
 
 const Dot = ({ status }) => {
@@ -45,32 +48,104 @@ export default function OrganizerEventManagement() {
   const [submitting, setSubmitting] = useState(false);
   const [capacityEdit, setCapacityEdit] = useState({});
   const [filterStatus, setFilterStatus] = useState("ALL");
+  const [selectedVenue, setSelectedVenue] = useState(null);
+  const [availability, setAvailability] = useState(null);
+  const [checkingAvailability, setCheckingAvailability] = useState(false);
+  const debounceRef = useRef(null);
+  const [searchParams] = useSearchParams();
+  // Attendee list state
+  const [attendeeEventId, setAttendeeEventId] = useState(null);
+  const [attendees, setAttendees] = useState(null);
+  const [attendeesLoading, setAttendeesLoading] = useState(false);
 
   const fetchAll = async () => {
     try {
       const [evRes, vRes] = await Promise.all([getMyEventsApi(), getVenuesApi()]);
       setEvents(evRes.data.data?.items || []);
-      setVenues((vRes.data.data || []).filter((v) => v.isActive));
+      setVenues(vRes.data.data || []);
     } catch { setError("Failed to load data"); }
     finally { setLoading(false); }
   };
 
   useEffect(() => { fetchAll(); }, []);
 
-  const handleChange = (e) => setForm((p) => ({ ...p, [e.target.name]: e.target.value }));
+  // Pre-select venue from URL query param (e.g. from VenueCard "Create Event Here" link)
+  useEffect(() => {
+    const venueIdParam = searchParams.get("venueId");
+    if (venueIdParam && venues.length > 0) {
+      const found = venues.find((v) => v._id === venueIdParam);
+      if (found) {
+        setSelectedVenue(found);
+        setForm((p) => ({ ...p, venueId: found._id }));
+        setShowForm(true);
+      }
+    }
+  }, [venues, searchParams]);
 
-  const closeForm = () => { setShowForm(false); setEditingEvent(null); setForm(EMPTY_FORM); };
+  const triggerAvailabilityCheck = (venueId, start, end) => {
+    clearTimeout(debounceRef.current);
+    if (!venueId || !start || !end || start >= end) { setAvailability(null); return; }
+    debounceRef.current = setTimeout(async () => {
+      setCheckingAvailability(true);
+      try {
+        const res = await checkVenueAvailabilityApi(venueId, start, end);
+        setAvailability(res.data);
+      } catch { setAvailability(null); }
+      finally { setCheckingAvailability(false); }
+    }, 500);
+  };
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    const updated = { ...form, [name]: value };
+    setForm(updated);
+
+    if (name === "venueId") {
+      const found = venues.find((v) => v._id === value);
+      setSelectedVenue(found || null);
+      setAvailability(null);
+      if (found && updated.startDateTime && updated.endDateTime) {
+        triggerAvailabilityCheck(value, updated.startDateTime, updated.endDateTime);
+      }
+    }
+
+    if (name === "startDateTime" || name === "endDateTime") {
+      setAvailability(null);
+      if (updated.venueId && updated.startDateTime && updated.endDateTime) {
+        triggerAvailabilityCheck(updated.venueId, updated.startDateTime, updated.endDateTime);
+      }
+    }
+  };
+
+  const closeForm = () => {
+    setShowForm(false);
+    setEditingEvent(null);
+    setForm(EMPTY_FORM);
+    setSelectedVenue(null);
+    setAvailability(null);
+  };
 
   const openCreate = () => { closeForm(); setShowForm(true); window.scrollTo({ top: 0, behavior: "smooth" }); };
+
+  // Convert a UTC ISO string to local datetime-local input format (YYYY-MM-DDTHH:mm)
+  const toLocalDT = (isoStr) => {
+    if (!isoStr) return "";
+    const d = new Date(isoStr);
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
 
   const openEdit = (ev) => {
     const matched = venues.find((v) => v.name === ev.venue?.name && v.location?.city === ev.venue?.city);
     setEditingEvent(ev);
+    setSelectedVenue(matched || null);
+    setAvailability(null);
     setForm({
       title: ev.title || "", description: ev.description || "",
-      genre: (ev.genre || []).join(", "), venueId: matched?._id || "",
-      startDateTime: ev.schedule?.startDateTime ? ev.schedule.startDateTime.slice(0, 16) : "",
-      endDateTime: ev.schedule?.endDateTime ? ev.schedule.endDateTime.slice(0, 16) : "",
+      genre: (ev.genre || []).join(", "),
+      venueId: matched?._id || "",
+      startDateTime: toLocalDT(ev.schedule?.startDateTime),
+      endDateTime: toLocalDT(ev.schedule?.endDateTime),
       capacity: ev.capacity || "",
       pricingType: ev.pricing?.type || "FREE", price: ev.pricing?.price || "",
       image: ev.image || "",
@@ -80,10 +155,11 @@ export default function OrganizerEventManagement() {
   };
 
   const buildPayload = () => {
-    const v = venues.find((v) => v._id === form.venueId);
+    const v = selectedVenue;
     const p = {
       title: form.title, description: form.description,
       genre: form.genre ? form.genre.split(",").map((g) => g.trim()).filter(Boolean) : [],
+      venueId: form.venueId,
       schedule: { startDateTime: form.startDateTime, endDateTime: form.endDateTime },
       capacity: Number(form.capacity),
       pricing: { type: form.pricingType, price: form.pricingType === "PAID" ? Number(form.price) : 0 },
@@ -95,6 +171,7 @@ export default function OrganizerEventManagement() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!editingEvent && !form.venueId) { setError("Please select a venue"); return; }
+    if (availability?.hasApprovedConflict) { setError("This venue is already booked for that time slot. Please choose different dates."); return; }
     setError(""); setSubmitting(true);
     try {
       let saved;
@@ -126,6 +203,17 @@ export default function OrganizerEventManagement() {
     catch (err) { setError(err.response?.data?.message || "Failed"); }
   };
 
+  const handleViewAttendees = async (eventId) => {
+    if (attendeeEventId === eventId) { setAttendeeEventId(null); setAttendees(null); return; }
+    setAttendeeEventId(eventId);
+    setAttendeesLoading(true);
+    try {
+      const res = await getEventAttendeesApi(eventId);
+      setAttendees(res.data.data);
+    } catch { setAttendees(null); }
+    finally { setAttendeesLoading(false); }
+  };
+
   if (loading) return <Loader />;
 
   const counts = {
@@ -134,16 +222,18 @@ export default function OrganizerEventManagement() {
     PENDING_APPROVAL: events.filter(e => e.status === "PENDING_APPROVAL").length,
     DRAFT: events.filter(e => e.status === "DRAFT").length,
     CANCELLED: events.filter(e => e.status === "CANCELLED").length,
+    COMPLETED: events.filter(e => e.status === "COMPLETED").length,
   };
 
   const filtered = filterStatus === "ALL" ? events : events.filter(e => e.status === filterStatus);
 
   const FILTERS = [
-    { key: "ALL", label: "All", count: counts.total },
-    { key: "PUBLISHED", label: "Live", count: counts.PUBLISHED },
-    { key: "PENDING_APPROVAL", label: "Pending", count: counts.PENDING_APPROVAL },
-    { key: "DRAFT", label: "Drafts", count: counts.DRAFT },
-    { key: "CANCELLED", label: "Cancelled", count: counts.CANCELLED },
+    { key: "ALL",              label: "All",       count: counts.total },
+    { key: "PUBLISHED",        label: "Live",      count: counts.PUBLISHED },
+    { key: "PENDING_APPROVAL", label: "Pending",   count: counts.PENDING_APPROVAL },
+    { key: "DRAFT",            label: "Drafts",    count: counts.DRAFT },
+    { key: "CANCELLED",        label: "Cancelled", count: counts.CANCELLED },
+    { key: "COMPLETED",        label: "Completed", count: counts.COMPLETED },
   ];
 
   return (
@@ -221,19 +311,71 @@ export default function OrganizerEventManagement() {
                   <label>Genre / Tags <span style={{ color: "var(--text-muted)", fontWeight: 400, textTransform: "none", fontSize: 11 }}>(comma-separated)</span></label>
                   <input name="genre" value={form.genre} onChange={handleChange} placeholder="Music, Jazz, Live" />
                 </div>
-                <div className="form-group">
+                <div className="form-group" style={{ gridColumn: "1 / -1" }}>
                   <label>Venue {!editingEvent && "*"}</label>
-                  {venues.length === 0 ? (
-                    <p style={{ fontSize: 13, color: "var(--danger)", marginTop: 4 }}>No active venues. Contact admin.</p>
+                  {!editingEvent ? (
+                    venues.length === 0 ? (
+                      <p style={{ fontSize: 13, color: "var(--danger)", marginTop: 4 }}>No active venues available. Contact admin.</p>
+                    ) : (
+                      <>
+                        <select name="venueId" value={form.venueId} onChange={handleChange} required>
+                          <option value="">— Select a venue —</option>
+                          {venues.filter(v => v.isActive).map((v) => (
+                            <option key={v._id} value={v._id}>
+                              {v.name} · {v.location?.city} · {v.capacity?.toLocaleString()} seats
+                            </option>
+                          ))}
+                        </select>
+
+                        {/* Venue preview */}
+                        {selectedVenue && (
+                          <div style={{ marginTop: 12, borderRadius: 10, overflow: "hidden", border: "1px solid #e0e7ff", boxShadow: "0 2px 8px rgba(99,102,241,0.08)", display: "flex" }}>
+                            <div style={{ width: 110, flexShrink: 0 }}>
+                              {selectedVenue.image
+                                ? <img src={selectedVenue.image} alt={selectedVenue.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                                : <div style={{ width: "100%", height: "100%", minHeight: 90, background: "linear-gradient(135deg, #eef2ff, #f5f3ff)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32 }}>🏛️</div>
+                              }
+                            </div>
+                            <div style={{ padding: "12px 14px", flex: 1, minWidth: 0 }}>
+                              <div style={{ fontWeight: 800, fontSize: 13, color: "#0f172a", marginBottom: 4 }}>{selectedVenue.name}</div>
+                              <div style={{ fontSize: 12, color: "#64748b", marginBottom: 3 }}>📍 {selectedVenue.location?.address}, {selectedVenue.location?.city}</div>
+                              <div style={{ fontSize: 12, color: "#64748b" }}>👥 Capacity: <strong>{selectedVenue.capacity?.toLocaleString()}</strong></div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Availability indicator */}
+                        {form.venueId && form.startDateTime && form.endDateTime && form.startDateTime < form.endDateTime && (
+                          <div style={{ marginTop: 10 }}>
+                            {checkingAvailability && (
+                              <div style={{ fontSize: 12, color: "#64748b", display: "flex", alignItems: "center", gap: 6 }}>
+                                <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: "50%", border: "2px solid #6366f1", borderTopColor: "transparent", animation: "spin 0.7s linear infinite" }} />
+                                Checking availability…
+                              </div>
+                            )}
+                            {!checkingAvailability && availability?.hasApprovedConflict && (
+                              <div style={{ background: "#fff1f2", border: "1px solid #fecdd3", borderRadius: 8, padding: "10px 14px", fontSize: 13, color: "#b91c1c", fontWeight: 600 }}>
+                                🚫 This venue is already booked for that time slot. Please choose different dates.
+                              </div>
+                            )}
+                            {!checkingAvailability && !availability?.hasApprovedConflict && availability?.hasPendingConflict && (
+                              <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "10px 14px", fontSize: 13, color: "#b45309", fontWeight: 600 }}>
+                                ⚠ Another booking request exists for an overlapping slot. You can still submit — the admin will decide.
+                              </div>
+                            )}
+                            {!checkingAvailability && availability?.available && !availability?.hasPendingConflict && (
+                              <div style={{ fontSize: 12, color: "#15803d", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+                                ✅ This time slot is available
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    )
                   ) : (
-                    <select name="venueId" value={form.venueId} onChange={handleChange} required={!editingEvent}>
-                      <option value="">— Select a venue —</option>
-                      {venues.map((v) => (
-                        <option key={v._id} value={v._id}>
-                          {v.name} · {v.location?.city} · {v.capacity?.toLocaleString()} seats
-                        </option>
-                      ))}
-                    </select>
+                    <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>
+                      📍 {editingEvent.venue?.name}, {editingEvent.venue?.city}
+                    </p>
                   )}
                 </div>
               </div>
@@ -241,11 +383,27 @@ export default function OrganizerEventManagement() {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 24px" }}>
                 <div className="form-group">
                   <label>Start Date & Time *</label>
-                  <input type="datetime-local" name="startDateTime" value={form.startDateTime} onChange={handleChange} required />
+                  <input
+                    type="datetime-local"
+                    name="startDateTime"
+                    value={form.startDateTime}
+                    onChange={handleChange}
+                    min={editingEvent ? undefined : new Date().toISOString().slice(0, 16)}
+                    required
+                  />
                 </div>
                 <div className="form-group">
                   <label>End Date & Time *</label>
-                  <input type="datetime-local" name="endDateTime" value={form.endDateTime} onChange={handleChange} required />
+                  <input
+                    type="datetime-local"
+                    name="endDateTime"
+                    value={form.endDateTime}
+                    onChange={handleChange}
+                    min={form.startDateTime
+                      ? new Date(new Date(form.startDateTime).getTime() + 30 * 60000).toISOString().slice(0, 16)
+                      : new Date(Date.now() + 30 * 60000).toISOString().slice(0, 16)}
+                    required
+                  />
                 </div>
               </div>
 
@@ -272,7 +430,7 @@ export default function OrganizerEventManagement() {
               <ImageUploader label="Cover Image" currentImage={form.image} onImageSelect={(img) => setForm((p) => ({ ...p, image: img }))} />
 
               <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid #e0e7ff", display: "flex", gap: 10 }}>
-                <button type="submit" className={`btn btn-primary${submitting ? " btn-loading" : ""}`} disabled={submitting}>
+                <button type="submit" className={`btn btn-primary${submitting ? " btn-loading" : ""}`} disabled={submitting || checkingAvailability || availability?.hasApprovedConflict}>
                   {submitting ? "Saving…" : editingEvent ? "Save Changes" : "Create Event"}
                 </button>
                 <button type="button" className="btn btn-ghost" onClick={closeForm}>Cancel</button>
@@ -309,7 +467,7 @@ export default function OrganizerEventManagement() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 20 }}>
             {filtered.map((ev) => {
               const s = STATUS[ev.status] || STATUS.DRAFT;
-              const remaining = ev.capacity != null ? ev.capacity - (ev.registeredCount ?? 0) : null;
+              const remaining = ev.capacity != null ? ev.capacity - (ev.confirmedCount ?? ev.registeredCount ?? 0) : null;
               return (
                 <div key={ev._id} style={{
                   background: "#fff", borderRadius: "var(--radius-lg)",
@@ -357,6 +515,11 @@ export default function OrganizerEventManagement() {
                           {ev.description.slice(0, 80)}{ev.description.length > 80 ? "…" : ""}
                         </p>
                       )}
+                      {ev.status === "DRAFT" && ev.rejectionReason && (
+                        <div style={{ marginTop: 8, padding: "8px 12px", background: "#fff1f2", border: "1px solid #fecdd3", borderRadius: 8, fontSize: 12, color: "#b91c1c", fontWeight: 600 }}>
+                          ⚠️ Rejected: {ev.rejectionReason}
+                        </div>
+                      )}
                     </div>
 
                     <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
@@ -397,22 +560,78 @@ export default function OrganizerEventManagement() {
                   )}
 
                   {/* Actions footer */}
-                  <div style={{ padding: "12px 18px", borderTop: "1px solid var(--border)", background: "#fafafa", display: "flex", gap: 8, alignItems: "center" }}>
-                    <button onClick={() => openEdit(ev)} className="btn btn-sm btn-ghost" style={{ flex: 1 }}>✏️ Edit</button>
-                    {ev.status === "DRAFT" && (
-                      <button onClick={() => handleSubmitForApproval(ev._id)} className="btn btn-sm"
-                        style={{ flex: 1, background: "#eef2ff", color: "#4338ca", border: "1px solid #c7d2fe" }}>
-                        🚀 Submit
-                      </button>
+                  <div style={{ padding: "12px 18px", borderTop: "1px solid var(--border)", background: "#fafafa", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    {ev.status === "COMPLETED" ? (
+                      <>
+                        <span style={{ fontSize: 13, color: "#1d4ed8", fontWeight: 600, flex: 1 }}>✅ Completed</span>
+                        <button onClick={() => handleViewAttendees(ev._id)} className="btn btn-sm"
+                          style={{ background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe" }}>
+                          👥 Attendees
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        {new Date(ev.schedule?.endDateTime) > new Date() && (
+                          <button onClick={() => openEdit(ev)} className="btn btn-sm btn-ghost" style={{ flex: 1 }}>✏️ Edit</button>
+                        )}
+                        {ev.status === "DRAFT" && (
+                          <button onClick={() => handleSubmitForApproval(ev._id)} className="btn btn-sm"
+                            style={{ flex: 1, background: "#eef2ff", color: "#4338ca", border: "1px solid #c7d2fe" }}>
+                            🚀 Submit
+                          </button>
+                        )}
+                        {ev.status === "PUBLISHED" && (
+                          <>
+                            <button onClick={() => handleViewAttendees(ev._id)} className="btn btn-sm"
+                              style={{ background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe" }}>
+                              👥 Attendees
+                            </button>
+                            <button onClick={() => handleCancelEvent(ev._id)} className="btn btn-sm"
+                              style={{ flex: 1, background: "#fffbeb", color: "#b45309", border: "1px solid #fde68a" }}>
+                              🚫 Cancel
+                            </button>
+                          </>
+                        )}
+                        <button onClick={() => handleDelete(ev._id)} className="btn btn-sm btn-danger" title="Delete">🗑</button>
+                      </>
                     )}
-                    {ev.status === "PUBLISHED" && (
-                      <button onClick={() => handleCancelEvent(ev._id)} className="btn btn-sm"
-                        style={{ flex: 1, background: "#fffbeb", color: "#b45309", border: "1px solid #fde68a" }}>
-                        🚫 Cancel
-                      </button>
-                    )}
-                    <button onClick={() => handleDelete(ev._id)} className="btn btn-sm btn-danger" title="Delete">🗑</button>
                   </div>
+
+                  {/* Attendee panel */}
+                  {attendeeEventId === ev._id && (
+                    <div style={{ borderTop: "1px solid #bfdbfe", background: "#eff6ff", padding: "16px 18px" }}>
+                      <div style={{ fontWeight: 700, fontSize: 13, color: "#1d4ed8", marginBottom: 12 }}>
+                        👥 Attendees — {ev.title}
+                      </div>
+                      {attendeesLoading ? (
+                        <div style={{ fontSize: 13, color: "#64748b" }}>Loading…</div>
+                      ) : !attendees || attendees.registrations.length === 0 ? (
+                        <div style={{ fontSize: 13, color: "#64748b" }}>No confirmed attendees yet.</div>
+                      ) : (
+                        <>
+                          <div style={{ display: "flex", gap: 16, marginBottom: 12, fontSize: 12, color: "#1d4ed8", fontWeight: 600 }}>
+                            <span>✅ Confirmed: {attendees.stats.totalConfirmed}</span>
+                            <span>🎫 Checked in: {attendees.stats.totalCheckedIn}</span>
+                            <span>⏳ Remaining: {attendees.stats.remaining}</span>
+                          </div>
+                          <div style={{ border: "1px solid #bfdbfe", borderRadius: 8, overflow: "hidden", background: "#fff" }}>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", padding: "8px 14px", background: "#dbeafe", fontSize: 11, fontWeight: 700, color: "#1e40af", textTransform: "uppercase", letterSpacing: "0.05em", gap: 12 }}>
+                              <span>Name</span><span>Email</span><span>Status</span>
+                            </div>
+                            {attendees.registrations.filter(r => r.status === "confirmed").map((reg, i) => (
+                              <div key={reg._id} style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", padding: "9px 14px", gap: 12, alignItems: "center", borderTop: i > 0 ? "1px solid #eff6ff" : "none" }}>
+                                <span style={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>{reg.userId?.name}</span>
+                                <span style={{ fontSize: 12, color: "#64748b" }}>{reg.userId?.email}</span>
+                                <span style={{ fontSize: 11, fontWeight: 700, color: reg.ticketStatus === "USED" ? "#16a34a" : "#1d4ed8" }}>
+                                  {reg.ticketStatus === "USED" ? "✓ In" : "🎫 Valid"}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}

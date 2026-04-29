@@ -36,8 +36,8 @@ const VenueCard = ({ venue }) => {
       </div>
       {user?.role === "ORGANIZER" && venue.isActive && (
         <div className="venue-card-footer">
-          <Link to={`/book-venue/${venue._id}`}>
-            Book Venue →
+          <Link to={`/organizer/events?venueId=${venue._id}`}>
+            Create Event Here →
           </Link>
         </div>
       )}

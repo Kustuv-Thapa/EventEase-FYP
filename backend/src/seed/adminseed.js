@@ -13,16 +13,18 @@ const run = async () => {
 
     if (existing) {
       existing.role = "ADMIN";
-      await existing.save();
-      console.log("✅ Admin already exists. Role ensured ADMIN:", email);
+      existing.isVerified = true; // ensure admin is always verified
+      await existing.save({ validateBeforeSave: false });
+      console.log("✅ Admin already exists. Role and verification ensured:", email);
       process.exit(0);
     }
 
     await User.create({
       name: "System Admin",
       email,
-      password: plainPassword, 
+      password: plainPassword,
       role: "ADMIN",
+      isVerified: true, // admin accounts skip OTP verification
     });
 
     console.log("✅ Admin created:", email, "password:", plainPassword);

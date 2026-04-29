@@ -28,8 +28,10 @@ exports.getVenues = async (req, res, next) => {
 
     const filter = {};
     if (city) filter["location.city"] = city;
-    if (active === "true") filter.isActive = true;
+    // Default to active venues only; pass active=false or active=all to override
     if (active === "false") filter.isActive = false;
+    else if (active === "all") { /* no filter — return everything */ }
+    else filter.isActive = true; // default
 
     const venues = await Venue.find(filter).sort({ createdAt: -1 });
     res.json({ data: venues });
@@ -50,7 +52,16 @@ exports.getVenueById = async (req, res, next) => {
 
 exports.updateVenue = async (req, res, next) => {
   try {
-    const venue = await Venue.findByIdAndUpdate(req.params.id, req.body, {
+    const { name, capacity, location, amenities, isActive } = req.body;
+
+    const updates = {};
+    if (name !== undefined) updates.name = name;
+    if (capacity !== undefined) updates.capacity = capacity;
+    if (location !== undefined) updates.location = location;
+    if (amenities !== undefined) updates.amenities = amenities;
+    if (isActive !== undefined) updates.isActive = isActive;
+
+    const venue = await Venue.findByIdAndUpdate(req.params.id, updates, {
       new: true,
       runValidators: true,
     });

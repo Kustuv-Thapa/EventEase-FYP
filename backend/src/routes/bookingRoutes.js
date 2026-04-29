@@ -7,13 +7,14 @@ const { validateBookingRequest, validateRejectionReason } = require("../middlewa
 
 const bookingController = require("../controllers/bookingController");
 
-// Availability check (can be public OR protected; your choice)
+// Availability check (can be public OR protected;)
 router.get("/venues/:venueId/availability", validateObjectId("venueId"), bookingController.checkAvailability);
 
 // User
 router.post("/", protect, validateBookingRequest, bookingController.createBooking);
 router.get("/me", protect, bookingController.getMyBookings);
 router.get("/check", protect, bookingController.checkMyBooking);
+router.get("/my-approved-venues", protect, allowRoles("ORGANIZER"), bookingController.getMyApprovedVenues);
 router.patch("/:id/cancel", protect, validateObjectId(), bookingController.cancelMyBooking);
 
 // Admin

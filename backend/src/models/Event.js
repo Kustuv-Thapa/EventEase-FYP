@@ -68,13 +68,24 @@ const eventSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["DRAFT", "PENDING_APPROVAL", "PUBLISHED", "CANCELLED"],
+      enum: ["DRAFT", "PENDING_APPROVAL", "PUBLISHED", "CANCELLED", "COMPLETED"],
       default: "DRAFT",
       index: true,
     },
 
     image: { type: String, default: "" }, // base64 data URL
     confirmedCount: { type: Number, default: 0, min: 0 },
+    bookingId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Booking",
+      default: null,
+    },
+    rejectionReason: {
+      type: String,
+      trim: true,
+      maxlength: 300,
+      default: null,
+    },
   },
   { timestamps: true }
 );

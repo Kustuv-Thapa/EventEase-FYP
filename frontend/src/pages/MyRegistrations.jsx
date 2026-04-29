@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { getMyRegistrationsApi, cancelMyRegistrationApi } from "../api/registrationApi";
-import { initiateEsewaPaymentApi } from "../api/esewaApi";
+import { initiateKhaltiPaymentApi } from "../api/khaltiApi";
 import Loader from "../components/Loader";
 import ErrorMessage from "../components/ErrorMessage";
 import EmptyState from "../components/EmptyState";
@@ -13,12 +13,15 @@ const STATUS_CONFIG = {
 
 const FILTERS = ["All", "pending", "confirmed", "cancelled"];
 
+const PAGE_SIZE = 5;
+
 const MyRegistrations = () => {
   const [registrations, setRegistrations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [activeFilter, setActiveFilter] = useState("All");
   const [cancelling, setCancelling] = useState(null);
+  const [page, setPage] = useState(1);
 
   const fetchData = async () => {
     try {
@@ -38,26 +41,8 @@ const MyRegistrations = () => {
   const handlePayNow = async (regId) => {
     setPaying(regId);
     try {
-      const payRes = await initiateEsewaPaymentApi(regId);
-      const pd = payRes.data.paymentData;
-      const form = document.createElement("form");
-      form.method = "POST";
-      form.action = pd.payment_url;
-      const fields = {
-        amount: pd.amount, tax_amount: pd.tax_amount, total_amount: pd.total_amount,
-        transaction_uuid: pd.transaction_uuid, product_code: pd.product_code,
-        product_service_charge: pd.product_service_charge,
-        product_delivery_charge: pd.product_delivery_charge,
-        success_url: pd.success_url, failure_url: pd.failure_url,
-        signed_field_names: pd.signed_field_names, signature: pd.signature,
-      };
-      Object.entries(fields).forEach(([key, value]) => {
-        const input = document.createElement("input");
-        input.type = "hidden"; input.name = key; input.value = value;
-        form.appendChild(input);
-      });
-      document.body.appendChild(form);
-      form.submit();
+      const payRes = await initiateKhaltiPaymentApi(regId);
+      window.location.href = payRes.data.payment_url;
     } catch (err) {
       setError(err.response?.data?.message || "Failed to initiate payment");
       setPaying(null);
@@ -80,6 +65,12 @@ const MyRegistrations = () => {
   const filtered = activeFilter === "All"
     ? registrations
     : registrations.filter((r) => r.status === activeFilter);
+
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  // Reset to page 1 when filter changes
+  const handleFilterChange = (f) => { setActiveFilter(f); setPage(1); };
 
   const counts = {
     All: registrations.length,
@@ -126,7 +117,7 @@ const MyRegistrations = () => {
           {FILTERS.map((f) => (
             <button
               key={f}
-              onClick={() => setActiveFilter(f)}
+              onClick={() => handleFilterChange(f)}
               style={{
                 padding: "7px 16px", borderRadius: 999, border: "1.5px solid",
                 fontSize: 13, fontWeight: 600, cursor: "pointer", transition: "all 0.15s",
@@ -147,8 +138,9 @@ const MyRegistrations = () => {
             message={activeFilter === "All" ? "Browse events and register to see them here." : "Try a different filter."}
           />
         ) : (
+          <>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {filtered.map((reg) => {
+            {paginated.map((reg) => {
               const cfg = STATUS_CONFIG[reg.status] || STATUS_CONFIG.pending;
               const startDate = reg.eventId?.schedule?.startDateTime
                 ? new Date(reg.eventId.schedule.startDateTime)
@@ -234,7 +226,7 @@ const MyRegistrations = () => {
                           {cancelling === reg._id ? "Cancelling..." : "Cancel Registration"}
                         </button>
                       )}
-                      {reg.status === "pending" && reg.eventId?.pricing?.type === "PAID" && reg.eventId?.status !== "CANCELLED" && reg.eventId && (
+                      {reg.status === "pending" && reg.eventId?.pricing?.type === "PAID" && reg.eventId?.status !== "CANCELLED" && reg.eventId?.status !== "COMPLETED" && reg.eventId && (
                         <button
                           onClick={() => handlePayNow(reg._id)}
                           disabled={paying === reg._id}
@@ -253,6 +245,21 @@ const MyRegistrations = () => {
               );
             })}
           </div>
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 8, marginTop: 24 }}>
+              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+                style={{ padding: "6px 14px", borderRadius: 8, border: "1.5px solid var(--border)", background: "var(--surface)", color: "var(--text-secondary)", fontWeight: 600, fontSize: 13, cursor: page === 1 ? "not-allowed" : "pointer", opacity: page === 1 ? 0.5 : 1 }}>
+                ← Prev
+              </button>
+              <span style={{ fontSize: 13, color: "var(--text-muted)", fontWeight: 600 }}>Page {page} of {totalPages}</span>
+              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+                style={{ padding: "6px 14px", borderRadius: 8, border: "1.5px solid var(--border)", background: "var(--surface)", color: "var(--text-secondary)", fontWeight: 600, fontSize: 13, cursor: page === totalPages ? "not-allowed" : "pointer", opacity: page === totalPages ? 0.5 : 1 }}>
+                Next →
+              </button>
+            </div>
+          )}
+          </>
         )}
       </div>
     </div>

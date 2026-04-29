@@ -3,11 +3,11 @@ const Booking = require("../models/Booking");
 const Venue = require("../models/Venue");
 const { toDate } = require("../utils/date");
 
-// shared overlap check
-async function hasOverlap({ venueId, start, end, excludeBookingId, session }) {
+// shared overlap check — only against approved bookings by default
+async function hasOverlap({ venueId, start, end, excludeBookingId, session, includesPending = false }) {
   const query = {
     venue: venueId,
-    status: { $in: ["pending", "approved"] },
+    status: includesPending ? { $in: ["pending", "approved"] } : "approved",
     startDateTime: { $lt: end },
     endDateTime: { $gt: start },
   };
@@ -17,6 +17,43 @@ async function hasOverlap({ venueId, start, end, excludeBookingId, session }) {
   const existing = await Booking.findOne(query).session(session || null).select("_id status startDateTime endDateTime");
   return !!existing;
 }
+
+/**
+ * Internal helper — NOT exposed as an HTTP route.
+ * Called by eventController inside an existing MongoDB session.
+ *
+ * @param {Object} params
+ * @param {ObjectId} params.venueId
+ * @param {ObjectId} params.eventId
+ * @param {ObjectId} params.requestedBy  - organizer user id
+ * @param {Date}     params.start
+ * @param {Date}     params.end
+ * @param {ClientSession} params.session - must be an active session
+ * @returns {Promise<BookingDocument>}
+ * @throws {Error} with statusCode 409 if slot is taken
+ */
+exports.createAndApproveBooking = async ({ venueId, eventId, requestedBy, start, end, session }) => {
+  const overlap = await hasOverlap({ venueId, start, end, session });
+  if (overlap) {
+    throw Object.assign(new Error("Time slot not available"), { statusCode: 409 });
+  }
+
+  const [booking] = await Booking.create(
+    [
+      {
+        venue: venueId,
+        event: eventId,
+        requestedBy,
+        startDateTime: start,
+        endDateTime: end,
+        status: "approved",
+      },
+    ],
+    { session }
+  );
+
+  return booking;
+};
 
 exports.checkAvailability = async (req, res, next) => {
   try {
@@ -30,8 +67,14 @@ exports.checkAvailability = async (req, res, next) => {
     const venue = await Venue.findById(venueId);
     if (!venue || !venue.isActive) return res.status(404).json({ message: "Venue not available" });
 
-    const overlap = await hasOverlap({ venueId, start, end });
-    res.json({ available: !overlap });
+    const approvedOverlap = await hasOverlap({ venueId, start, end });
+    const pendingOverlap = !approvedOverlap && await hasOverlap({ venueId, start, end, includesPending: true });
+
+    res.json({
+      available: !approvedOverlap,
+      hasApprovedConflict: approvedOverlap,
+      hasPendingConflict: !!pendingOverlap,
+    });
   } catch (err) {
     next(err);
   }
@@ -42,21 +85,22 @@ exports.createBooking = async (req, res, next) => {
   try {
     const { venueId, eventId, startDateTime, endDateTime, notes } = req.body;
 
+    // Input validation is handled by validateBookingRequest middleware.
+    // Re-parse dates here for use in the transaction.
     const start = toDate(startDateTime);
     const end = toDate(endDateTime);
-
-    if (!venueId || !start || !end) {
-      return res.status(400).json({ message: "venueId, startDateTime, endDateTime are required" });
-    }
-    if (start >= end) return res.status(400).json({ message: "endDateTime must be after startDateTime" });
 
     // Transaction protects against race conditions
     await session.withTransaction(async () => {
       const venue = await Venue.findById(venueId).session(session);
       if (!venue || !venue.isActive) throw Object.assign(new Error("Venue not available"), { statusCode: 404 });
 
-      const overlap = await hasOverlap({ venueId, start, end, session });
-      if (overlap) throw Object.assign(new Error("Venue already booked for that time range"), { statusCode: 409 });
+      // Hard block: venue already has an approved booking for this slot
+      const approvedOverlap = await hasOverlap({ venueId, start, end, session });
+      if (approvedOverlap) throw Object.assign(new Error("Venue is already booked for that time range"), { statusCode: 409 });
+
+      // Soft check: other pending requests exist — still allow, admin will decide
+      const pendingOverlap = await hasOverlap({ venueId, start, end, session, includesPending: true });
 
       const booking = await Booking.create(
         [
@@ -73,7 +117,13 @@ exports.createBooking = async (req, res, next) => {
         { session }
       );
 
-      res.status(201).json({ message: "Booking requested (pending approval)", data: booking[0] });
+      res.status(201).json({
+        message: "Booking requested (pending approval)",
+        data: booking[0],
+        warning: pendingOverlap
+          ? "Note: another booking request exists for an overlapping time slot. The admin will decide which to approve."
+          : null,
+      });
     });
   } catch (err) {
     // If not replica set, transaction will fail.
@@ -144,7 +194,35 @@ exports.approveBooking = async (req, res, next) => {
     booking.rejectionReason = undefined;
 
     await booking.save();
-    res.json({ message: "Booking approved", data: booking });
+
+    // Auto-reject all other pending bookings that overlap this same venue/time
+    const conflicting = await Booking.find({
+      _id: { $ne: booking._id },
+      venue: booking.venue,
+      status: "pending",
+      startDateTime: { $lt: booking.endDateTime },
+      endDateTime: { $gt: booking.startDateTime },
+    });
+
+    if (conflicting.length > 0) {
+      await Booking.updateMany(
+        { _id: { $in: conflicting.map((b) => b._id) } },
+        {
+          $set: {
+            status: "rejected",
+            reviewedBy: req.user.id,
+            reviewedAt: new Date(),
+            rejectionReason: "Another booking was approved for this time slot.",
+          },
+        }
+      );
+    }
+
+    res.json({
+      message: "Booking approved",
+      data: booking,
+      autoRejected: conflicting.length,
+    });
   } catch (err) {
     next(err);
   }
@@ -176,12 +254,19 @@ exports.cancelMyBooking = async (req, res, next) => {
     const booking = await Booking.findById(req.params.id);
     if (!booking) return res.status(404).json({ message: "Booking not found" });
 
-    // Only owner (or admin via other route) can cancel
+    // Only owner can cancel
     if (String(booking.requestedBy) !== String(req.user.id)) {
       return res.status(403).json({ message: "Not allowed" });
     }
 
     if (booking.status === "cancelled") return res.status(400).json({ message: "Already cancelled" });
+
+    // Block cancellation of approved bookings that are linked to an event
+    if (booking.status === "approved" && booking.event) {
+      return res.status(400).json({
+        message: "Cannot cancel an approved booking that is linked to an event. Remove the event first.",
+      });
+    }
 
     booking.status = "cancelled";
     await booking.save();
@@ -206,18 +291,48 @@ exports.adminDashboardStats = async (req, res, next) => {
   }
 };
 
-// GET /api/bookings/check?venueId=:id
-// Returns whether the current organizer has an active booking for a venue
-exports.checkMyBooking = async (req, res, next) => {
+// GET /api/bookings/my-approved-venues
+// Returns organizer's approved bookings with venue details (for event creation dropdown)
+exports.getMyApprovedVenues = async (req, res, next) => {
   try {
-    const { venueId } = req.query;
+    const bookings = await Booking.find({
+      requestedBy: req.user.id,
+      status: "approved",
+      event: null, // only bookings not yet linked to an event
+    })
+      .populate("venue", "name capacity location amenities image")
+      .sort({ startDateTime: 1 });
+
+    res.json({ data: bookings });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.checkMyBooking = async (req, res, next) => {
+  // GET /api/bookings/check?venueId=:id&start=...&end=...
+  // Returns the organizer's booking for a venue, optionally filtered to cover specific dates
+  try {
+    const { venueId, start, end } = req.query;
     if (!venueId) return res.status(400).json({ message: "venueId is required" });
 
-    const booking = await Booking.findOne({
+    const query = {
       venue: venueId,
       requestedBy: req.user.id,
       status: { $in: ["pending", "approved"] },
-    });
+    };
+
+    // If dates provided, find a booking that covers the full event window
+    if (start && end) {
+      const startDt = new Date(start);
+      const endDt = new Date(end);
+      if (!isNaN(startDt) && !isNaN(endDt)) {
+        query.startDateTime = { $lte: startDt };
+        query.endDateTime = { $gte: endDt };
+      }
+    }
+
+    const booking = await Booking.findOne(query).sort({ createdAt: -1 });
 
     res.json({ data: { hasActiveBooking: !!booking, booking: booking || null } });
   } catch (err) {

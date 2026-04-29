@@ -62,11 +62,14 @@ const downloadTicket = (ticket) => {
   qrImg.src = ticket.qrCode;
 };
 
+const PAGE_SIZE = 5;
+
 const MyTickets = () => {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [expandedQr, setExpandedQr] = useState(null);
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     getMyTicketsApi()
@@ -96,8 +99,9 @@ const MyTickets = () => {
             message="Register for an event to get your ticket here."
           />
         ) : (
+          <>
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            {tickets.map((ticket) => {
+            {tickets.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((ticket) => {
               const event = ticket.event;
               const startDate = event?.schedule?.startDateTime ? new Date(event.schedule.startDateTime) : null;
               const isExpanded = expandedQr === ticket._id;
@@ -215,6 +219,23 @@ const MyTickets = () => {
               );
             })}
           </div>
+          {/* Pagination */}
+          {Math.ceil(tickets.length / PAGE_SIZE) > 1 && (
+            <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 8, marginTop: 24 }}>
+              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+                style={{ padding: "6px 14px", borderRadius: 8, border: "1.5px solid var(--border)", background: "var(--surface)", color: "var(--text-secondary)", fontWeight: 600, fontSize: 13, cursor: page === 1 ? "not-allowed" : "pointer", opacity: page === 1 ? 0.5 : 1 }}>
+                ← Prev
+              </button>
+              <span style={{ fontSize: 13, color: "var(--text-muted)", fontWeight: 600 }}>
+                Page {page} of {Math.ceil(tickets.length / PAGE_SIZE)}
+              </span>
+              <button onClick={() => setPage(p => Math.min(Math.ceil(tickets.length / PAGE_SIZE), p + 1))} disabled={page === Math.ceil(tickets.length / PAGE_SIZE)}
+                style={{ padding: "6px 14px", borderRadius: 8, border: "1.5px solid var(--border)", background: "var(--surface)", color: "var(--text-secondary)", fontWeight: 600, fontSize: 13, cursor: page === Math.ceil(tickets.length / PAGE_SIZE) ? "not-allowed" : "pointer", opacity: page === Math.ceil(tickets.length / PAGE_SIZE) ? 0.5 : 1 }}>
+                Next →
+              </button>
+            </div>
+          )}
+          </>
         )}
       </div>
     </div>

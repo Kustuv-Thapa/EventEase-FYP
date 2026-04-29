@@ -91,7 +91,8 @@ const VerifyTicket = () => {
           },
           (err) => {
             // Ignore scan errors (camera still scanning)
-            if (err?.includes("permission")) {
+            const errMsg = typeof err === "string" ? err : err?.message || "";
+            if (errMsg.includes("permission")) {
               setCameraError("Camera access denied. Please use manual entry.");
               stopScanner();
             }
@@ -181,8 +182,7 @@ const VerifyTicket = () => {
             <button
               type="submit"
               disabled={loading || !ticketId.trim()}
-              className="btn-primary"
-              style={{ padding: "11px 22px", fontWeight: 700, whiteSpace: "nowrap" }}
+              className="btn btn-primary"
             >
               {loading ? "Checking..." : "Verify"}
             </button>

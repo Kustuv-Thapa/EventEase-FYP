@@ -8,7 +8,7 @@ const registrationRoutes = require("./routes/registrationRoutes");
 const venueRoutes = require("./routes/venueRoutes");
 const bookingRoutes = require("./routes/bookingRoutes");
 const ticketRoutes = require("./routes/ticketRoutes");
-const esewaRoutes = require("./routes/esewaRoutes");  
+const khaltiRoutes = require("./routes/khaltiRoutes");
 
 const notFound = require("./middlewares/notFound");
 const errorHandler = require("./middlewares/errorHandler");
@@ -40,7 +40,7 @@ app.use("/api/registrations", registrationRoutes);
 app.use("/api/venues", venueRoutes);
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/tickets", ticketRoutes);
-app.use("/api/esewa", esewaRoutes);  
+app.use("/api/khalti", khaltiRoutes);
 
 // 404 handler
 app.use(notFound);

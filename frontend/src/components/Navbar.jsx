@@ -55,8 +55,12 @@ const Navbar = () => {
     </>
   ) : (
     <div className="navbar-user">
-      <div className="navbar-avatar">{initials}</div>
-      <span className="navbar-name">{user?.name?.split(" ")[0]}</span>
+      <Link to="/profile" className="navbar-avatar" title="My Profile" style={{ textDecoration: "none", overflow: "hidden" }}>
+        {user?.avatar
+          ? <img src={user.avatar} alt="avatar" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }} />
+          : initials
+        }
+      </Link>
       <button className="logout-btn" onClick={handleLogout}>Logout</button>
     </div>
   );
@@ -91,8 +95,12 @@ const Navbar = () => {
         <div className="navbar-divider" />
         {isAuthenticated ? (
           <div className="navbar-user" style={{ padding: "12px 24px" }}>
-            <div className="navbar-avatar">{initials}</div>
-            <span className="navbar-name">{user?.name?.split(" ")[0]}</span>
+            <Link to="/profile" className="navbar-avatar" title="My Profile" style={{ textDecoration: "none", overflow: "hidden" }}>
+              {user?.avatar
+                ? <img src={user.avatar} alt="avatar" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }} />
+                : initials
+              }
+            </Link>
             <button className="logout-btn" onClick={handleLogout}>Logout</button>
           </div>
         ) : (

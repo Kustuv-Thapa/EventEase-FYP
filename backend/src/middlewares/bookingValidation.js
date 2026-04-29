@@ -30,8 +30,13 @@ const validateBookingRequest = (req, res, next) => {
     return res.status(400).json({ message: "Cannot book in the past" });
   }
 
-  // Optional: Max booking duration (e.g., 7 days)
-  const maxDuration = 7 * 24 * 60 * 60 * 1000; // 7 days in ms
+  // Minimum booking duration: 30 minutes
+  if (end - start < 30 * 60 * 1000) {
+    return res.status(400).json({ message: "Booking must be at least 30 minutes" });
+  }
+
+  // Maximum booking duration: 7 days
+  const maxDuration = 7 * 24 * 60 * 60 * 1000;
   if (end - start > maxDuration) {
     return res.status(400).json({ message: "Booking duration cannot exceed 7 days" });
   }

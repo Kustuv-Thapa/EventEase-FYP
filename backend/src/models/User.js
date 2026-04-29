@@ -32,6 +32,10 @@ const userSchema = new mongoose.Schema(
     },
     passwordResetToken: { type: String, select: false },
     passwordResetExpiry: { type: Date, select: false },
+    avatar: { type: String, default: "" }, // base64 data URL
+    isVerified: { type: Boolean, default: false },
+    otpCode: { type: String, select: false },
+    otpExpiry: { type: Date, select: false },
   },
   { timestamps: true }
 );

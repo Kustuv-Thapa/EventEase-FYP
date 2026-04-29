@@ -13,6 +13,7 @@ const Login = () => {
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [errors, setErrors] = useState({});
   const [serverError, setServerError] = useState("");
+  const [unverifiedEmail, setUnverifiedEmail] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleChange = (e) => setFormData((p) => ({ ...p, [e.target.name]: e.target.value }));
@@ -22,11 +23,16 @@ const Login = () => {
     const validationErrors = validateLoginForm(formData);
     if (Object.keys(validationErrors).length > 0) { setErrors(validationErrors); return; }
     try {
-      setErrors({}); setServerError(""); setLoading(true);
+      setErrors({}); setServerError(""); setUnverifiedEmail(""); setLoading(true);
       await login(formData);
       navigate("/");
     } catch (error) {
-      setServerError(error.response?.data?.message || "Login failed");
+      const msg = error.response?.data?.message || "Login failed";
+      // If unverified, offer a link to verify
+      if (error.response?.status === 403 && msg.includes("verify")) {
+        setUnverifiedEmail(formData.email);
+      }
+      setServerError(msg);
     } finally {
       setLoading(false);
     }
@@ -45,19 +51,27 @@ const Login = () => {
           <div className="alert alert-success" style={{ marginBottom: 20 }}>{successMsg}</div>
         )}
         <ErrorMessage message={serverError} />
+        {unverifiedEmail && (
+          <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "10px 14px", fontSize: 13, color: "#b45309", marginBottom: 16 }}>
+            Your account is not verified.{" "}
+            <Link to="/register" state={{ email: unverifiedEmail }} style={{ color: "#b45309", fontWeight: 700 }}>
+              Verify now →
+            </Link>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} autoComplete="off">
-          <div className={`form-group${errors.email ? ' has-error' : ''}`}>
+          <div className={`form-group${errors.email ? " has-error" : ""}`}>
             <label>Email</label>
             <input type="email" name="email" placeholder="you@example.com" onChange={handleChange} autoComplete="new-password" />
             {errors.email && <p className="error">{errors.email}</p>}
           </div>
-          <div className={`form-group${errors.password ? ' has-error' : ''}`}>
+          <div className={`form-group${errors.password ? " has-error" : ""}`}>
             <label>Password</label>
             <input type="password" name="password" placeholder="Your password" onChange={handleChange} autoComplete="new-password" />
             {errors.password && <p className="error">{errors.password}</p>}
           </div>
-          <button type="submit" className={`btn btn-primary btn-lg form-submit${loading ? ' btn-loading' : ''}`} disabled={loading}>
+          <button type="submit" className={`btn btn-primary btn-lg form-submit${loading ? " btn-loading" : ""}`} disabled={loading}>
             {loading ? "Signing in…" : "Sign In →"}
           </button>
         </form>

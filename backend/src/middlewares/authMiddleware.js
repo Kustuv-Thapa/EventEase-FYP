@@ -12,7 +12,7 @@ const protect = async (req, res, next) => {
 
     const token = authHeader.split(" ")[1];
 
-    if (tokenBlacklist.has(token)) {
+    if (await tokenBlacklist.has(token)) {
       return res.status(401).json({ message: "Not authorized: token has been invalidated" });
     }
 
