@@ -172,7 +172,7 @@ const createEvent = async (req, res, next) => {
 // GET /api/events (PUBLIC) — only PUBLISHED
 const getEvents = async (req, res, next) => {
   try {
-    const page = Math.max(parseInt(req.query.page || "1", 10), 1);
+    const page = Math.min(Math.max(parseInt(req.query.page || "1", 10), 1), 500);
     const limit = Math.min(Math.max(parseInt(req.query.limit || "10", 10), 1), 50);
     const skip = (page - 1) * limit;
 
@@ -182,10 +182,12 @@ const getEvents = async (req, res, next) => {
 
     if (req.query.search) {
       const q = req.query.search.trim();
+      // Escape regex metacharacters to prevent ReDoS / unintended matches
+      const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       filters.$or = [
-        { title: { $regex: q, $options: "i" } },
-        { description: { $regex: q, $options: "i" } },
-        { genre: { $in: [new RegExp(q, "i")] } },
+        { title: { $regex: escaped, $options: "i" } },
+        { description: { $regex: escaped, $options: "i" } },
+        { genre: { $in: [new RegExp(escaped, "i")] } },
       ];
     }
 
@@ -194,12 +196,8 @@ const getEvents = async (req, res, next) => {
       Event.countDocuments(filters),
     ]);
 
-    // Attach registeredCount (use confirmedCount from model, fallback to countDocuments)
-    const itemsWithCount = items.map((ev) => {
-      const obj = ev.toObject();
-      obj.registeredCount = ev.confirmedCount || 0;
-      return obj;
-    });
+    // Return confirmedCount directly — no alias needed
+    const itemsWithCount = items.map((ev) => ev.toObject());
 
     res.status(200).json({
       success: true,
@@ -222,7 +220,6 @@ const getEventById = async (req, res, next) => {
     }
 
     const obj = event.toObject();
-    obj.registeredCount = event.confirmedCount || 0;
 
     res.status(200).json({ success: true, message: "Event fetched", data: obj });
   } catch (err) {
@@ -256,6 +253,7 @@ const updateEvent = async (req, res, next) => {
       const startDt = new Date(updates.schedule.startDateTime);
       const endDt = new Date(updates.schedule.endDateTime);
       if (isNaN(startDt) || isNaN(endDt)) { res.status(400); throw new Error("Invalid date format"); }
+      if (startDt < new Date()) { res.status(400); throw new Error("Start date cannot be in the past"); }
       if (endDt <= startDt) { res.status(400); throw new Error("End date must be after start date"); }
       if (endDt - startDt < 30 * 60 * 1000) { res.status(400); throw new Error("Event must be at least 30 minutes long"); }
     }
@@ -484,15 +482,18 @@ const adminListPendingEvents = async (req, res, next) => {
 const adminApproveEvent = async (req, res, next) => {
   const session = await mongoose.startSession();
   try {
+    // Collect result outside the transaction callback so we can respond after commit
+    let responseData = null;
+
     await session.withTransaction(async () => {
       const event = await Event.findById(req.params.id).session(session);
-      if (!event) { res.status(404); throw new Error("Event not found"); }
-      if (event.status !== "PENDING_APPROVAL") { res.status(400); throw new Error("Event is not pending approval"); }
+      if (!event) throw Object.assign(new Error("Event not found"), { statusCode: 404 });
+      if (event.status !== "PENDING_APPROVAL") throw Object.assign(new Error("Event is not pending approval"), { statusCode: 400 });
 
       // Verify linked booking
-      if (!event.bookingId) { res.status(400); throw new Error("Linked booking not found"); }
+      if (!event.bookingId) throw Object.assign(new Error("Linked booking not found"), { statusCode: 400 });
       const booking = await Booking.findById(event.bookingId).session(session);
-      if (!booking) { res.status(400); throw new Error("Linked booking not found"); }
+      if (!booking) throw Object.assign(new Error("Linked booking not found"), { statusCode: 400 });
 
       // Race condition guard: check for approved overlap
       const overlap = await Booking.findOne({
@@ -502,7 +503,7 @@ const adminApproveEvent = async (req, res, next) => {
         startDateTime: { $lt: booking.endDateTime },
         endDateTime: { $gt: booking.startDateTime },
       }).session(session);
-      if (overlap) { res.status(409); throw new Error("Cannot approve: overlaps an approved booking"); }
+      if (overlap) throw Object.assign(new Error("Cannot approve: overlaps an approved booking"), { statusCode: 409 });
 
       // Publish event and approve booking
       event.status = "PUBLISHED";
@@ -545,16 +546,19 @@ const adminApproveEvent = async (req, res, next) => {
         }
       }
 
-      res.status(200).json({
-        success: true,
-        message: "Event approved and published",
-        data: event,
-        autoRejectedBookings: conflicting.length,
-        eventsToDraft,
-      });
+      responseData = { event, autoRejectedBookings: conflicting.length, eventsToDraft };
     });
 
-    // Notify organizer after transaction commits (non-blocking)
+    // Respond AFTER the transaction has committed
+    res.status(200).json({
+      success: true,
+      message: "Event approved and published",
+      data: responseData.event,
+      autoRejectedBookings: responseData.autoRejectedBookings,
+      eventsToDraft: responseData.eventsToDraft,
+    });
+
+    // Notify organizer after response is sent (non-blocking)
     try {
       const approvedEvent = await Event.findById(req.params.id).populate("organizerId", "name email");
       if (approvedEvent?.organizerId?.email) {
@@ -573,8 +577,9 @@ const adminApproveEvent = async (req, res, next) => {
     } catch { /* email failure must not break the response */ }
   } catch (err) {
     if (err.message?.includes("Transaction numbers") || err.message?.includes("replica set")) {
-      return res.status(500).json({ message: "Transactions require MongoDB replica set" });
+      return res.status(500).json({ success: false, message: "Transactions require MongoDB replica set" });
     }
+    if (err.statusCode) res.status(err.statusCode);
     next(err);
   } finally {
     session.endSession();
@@ -593,10 +598,13 @@ const adminRejectEvent = async (req, res, next) => {
       return res.status(400).json({ success: false, message: "Rejection reason too long (max 300 characters)" });
     }
 
+    // Collect result outside the transaction callback so we can respond after commit
+    let rejectedEvent = null;
+
     await session.withTransaction(async () => {
       const event = await Event.findById(req.params.id).session(session);
-      if (!event) { res.status(404); throw new Error("Event not found"); }
-      if (event.status !== "PENDING_APPROVAL") { res.status(400); throw new Error("Event is not pending approval"); }
+      if (!event) throw Object.assign(new Error("Event not found"), { statusCode: 404 });
+      if (event.status !== "PENDING_APPROVAL") throw Object.assign(new Error("Event is not pending approval"), { statusCode: 400 });
 
       event.status = "DRAFT";
       event.rejectionReason = reason.trim();
@@ -610,25 +618,29 @@ const adminRejectEvent = async (req, res, next) => {
         );
       }
 
-      res.status(200).json({ success: true, message: "Event rejected, returned to DRAFT", data: event });
+      rejectedEvent = event;
     });
 
-    // Notify organizer after transaction commits (non-blocking)
+    // Respond AFTER the transaction has committed
+    res.status(200).json({ success: true, message: "Event rejected, returned to DRAFT", data: rejectedEvent });
+
+    // Notify organizer after response is sent (non-blocking)
     try {
-      const rejectedEvent = await Event.findById(req.params.id).populate("organizerId", "name email");
-      if (rejectedEvent?.organizerId?.email) {
+      const eventWithOrg = await Event.findById(req.params.id).populate("organizerId", "name email");
+      if (eventWithOrg?.organizerId?.email) {
         sendEventRejectedEmail({
-          to: rejectedEvent.organizerId.email,
-          name: rejectedEvent.organizerId.name,
-          eventTitle: rejectedEvent.title,
+          to: eventWithOrg.organizerId.email,
+          name: eventWithOrg.organizerId.name,
+          eventTitle: eventWithOrg.title,
           reason: reason.trim(),
         });
       }
     } catch { /* email failure must not break the response */ }
   } catch (err) {
     if (err.message?.includes("Transaction numbers") || err.message?.includes("replica set")) {
-      return res.status(500).json({ message: "Transactions require MongoDB replica set" });
+      return res.status(500).json({ success: false, message: "Transactions require MongoDB replica set" });
     }
+    if (err.statusCode) res.status(err.statusCode);
     next(err);
   } finally {
     session.endSession();
@@ -650,8 +662,47 @@ const uploadEventImage = async (req, res, next) => {
     if (!ensureCanModifyEvent(req.user, event)) { res.status(403); throw new Error("Forbidden"); }
 
     event.image = image;
+    // Keep images array in sync — replace first element or add
+    if (event.images && event.images.length > 0) {
+      event.images[0] = image;
+    } else {
+      event.images = [image];
+    }
     await event.save();
     res.status(200).json({ success: true, message: "Event image updated", data: event });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// PATCH /api/events/:id/gallery (ADMIN/ORGANIZER — update full gallery)
+const updateEventGallery = async (req, res, next) => {
+  try {
+    const { images } = req.body;
+    if (!Array.isArray(images)) {
+      res.status(400); throw new Error("images must be an array");
+    }
+    if (images.length > 5) {
+      res.status(400); throw new Error("Maximum 5 images allowed");
+    }
+    for (const img of images) {
+      if (!img.startsWith("data:image/")) {
+        res.status(400); throw new Error("Invalid image data");
+      }
+      if (img.length > 2 * 1024 * 1024 * 1.37) {
+        res.status(400); throw new Error("Each image must be under ~2MB");
+      }
+    }
+
+    const event = await Event.findById(req.params.id);
+    if (!event) { res.status(404); throw new Error("Event not found"); }
+    if (!ensureCanModifyEvent(req.user, event)) { res.status(403); throw new Error("Forbidden"); }
+
+    event.images = images;
+    // Keep cover image in sync with first gallery image
+    event.image = images.length > 0 ? images[0] : "";
+    await event.save();
+    res.status(200).json({ success: true, message: "Gallery updated", data: event });
   } catch (err) {
     next(err);
   }
@@ -766,4 +817,5 @@ module.exports = {
   uploadEventImage,
   updateCapacity,
   cancelEvent,
+  updateEventGallery,
 };

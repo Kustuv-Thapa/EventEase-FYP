@@ -1,17 +1,19 @@
 import { useEffect, useState, useRef } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { getMyEventsApi, createEventApi, updateEventApi, deleteEventApi, submitEventForApprovalApi, uploadEventImageApi, updateCapacityApi, cancelEventApi } from "../api/eventApi";
+import { getMyEventsApi, createEventApi, updateEventApi, deleteEventApi, submitEventForApprovalApi, uploadEventImageApi, updateCapacityApi, cancelEventApi, updateEventGalleryApi } from "../api/eventApi";
 import { getVenuesApi, checkVenueAvailabilityApi } from "../api/venueApi";
-import { getEventAttendeesApi } from "../api/registrationApi";
-import ErrorMessage from "../components/ErrorMessage";
+import { getAdminRegistrationsApi, approveRegistrationApi, adminEventRegistrationsApi } from "../api/registrationApi";
+import { getEventFeedbackApi } from "../api/feedbackApi";
+import StarRating from "../components/StarRating";
+import toast from "react-hot-toast";
 import Loader from "../components/Loader";
-import ImageUploader from "../components/ImageUploader";
+import GalleryUploader from "../components/GalleryUploader";
 import EmptyState from "../components/EmptyState";
 
 const EMPTY_FORM = {
   title: "", description: "", genre: "",
   venueId: "", startDateTime: "", endDateTime: "",
-  capacity: "", pricingType: "FREE", price: "", image: "",
+  capacity: "", pricingType: "FREE", price: "", images: [],
 };
 
 const STATUS = {
@@ -41,7 +43,6 @@ export default function OrganizerEventManagement() {
   const [events, setEvents] = useState([]);
   const [venues, setVenues] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editingEvent, setEditingEvent] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -58,13 +59,21 @@ export default function OrganizerEventManagement() {
   const [attendees, setAttendees] = useState(null);
   const [attendeesLoading, setAttendeesLoading] = useState(false);
 
+  // Feedback panel state
+  const [feedbackEventId, setFeedbackEventId] = useState(null);
+  const [feedbackData, setFeedbackData] = useState(null);
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
+
   const fetchAll = async () => {
     try {
       const [evRes, vRes] = await Promise.all([getMyEventsApi(), getVenuesApi()]);
       setEvents(evRes.data.data?.items || []);
       setVenues(vRes.data.data || []);
-    } catch { setError("Failed to load data"); }
-    finally { setLoading(false); }
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to load data");
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { fetchAll(); }, []);
@@ -148,7 +157,7 @@ export default function OrganizerEventManagement() {
       endDateTime: toLocalDT(ev.schedule?.endDateTime),
       capacity: ev.capacity || "",
       pricingType: ev.pricing?.type || "FREE", price: ev.pricing?.price || "",
-      image: ev.image || "",
+      images: ev.images?.length > 0 ? ev.images : (ev.image ? [ev.image] : []),
     });
     setShowForm(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -170,37 +179,49 @@ export default function OrganizerEventManagement() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!editingEvent && !form.venueId) { setError("Please select a venue"); return; }
-    if (availability?.hasApprovedConflict) { setError("This venue is already booked for that time slot. Please choose different dates."); return; }
-    setError(""); setSubmitting(true);
+    if (!editingEvent && !form.venueId) { toast.error("Please select a venue"); return; }
+    if (availability?.hasApprovedConflict) { toast.error("This venue is already booked for that time slot. Please choose different dates."); return; }
+    setSubmitting(true);
     try {
       let saved;
       if (editingEvent) { const r = await updateEventApi(editingEvent._id, buildPayload()); saved = r.data.data; }
       else { const r = await createEventApi(buildPayload()); saved = r.data.data; }
-      if (form.image?.startsWith("data:image/")) await uploadEventImageApi(saved._id, form.image);
+      if (form.images?.length > 0) {
+        try {
+          await updateEventGalleryApi(saved._id, form.images);
+        } catch (galleryErr) {
+          // Event saved successfully but gallery failed — show warning and still close form
+          toast.error("Event saved, but gallery upload failed: " + (galleryErr.response?.data?.message || "Please try re-uploading images."));
+          fetchAll();
+          closeForm();
+          return;
+        }
+      }
+      toast.success(editingEvent ? "Event updated successfully!" : "Event created successfully!");
       closeForm(); fetchAll();
-    } catch (err) { setError(err.response?.data?.message || "Failed to save event"); }
+    } catch (err) { toast.error(err.response?.data?.message || "Failed to save event"); }
     finally { setSubmitting(false); }
   };
 
   const handleDelete = async (id) => {
     if (!window.confirm("Delete this event?")) return;
-    try { await deleteEventApi(id); fetchAll(); } catch { setError("Failed to delete"); }
+    try { await deleteEventApi(id); toast.success("Event deleted successfully!"); fetchAll(); }
+    catch (err) { toast.error(err.response?.data?.message || "Failed to delete event"); }
   };
   const handleSubmitForApproval = async (id) => {
-    try { setError(""); await submitEventForApprovalApi(id); fetchAll(); }
-    catch (err) { setError(err.response?.data?.message || "Failed"); }
+    try { await submitEventForApprovalApi(id); toast.success("Event submitted for approval!"); fetchAll(); }
+    catch (err) { toast.error(err.response?.data?.message || "Failed to submit for approval"); }
   };
   const handleUpdateCapacity = async (id) => {
     const cap = parseInt(capacityEdit[id], 10);
-    if (!cap || cap < 1) { setError("Enter a valid capacity"); return; }
-    try { setError(""); await updateCapacityApi(id, cap); setCapacityEdit((p) => ({ ...p, [id]: "" })); fetchAll(); }
-    catch (err) { setError(err.response?.data?.message || "Failed"); }
+    if (!cap || cap < 1) { toast.error("Enter a valid capacity"); return; }
+    try { await updateCapacityApi(id, cap); setCapacityEdit((p) => ({ ...p, [id]: "" })); toast.success("Capacity updated successfully!"); fetchAll(); }
+    catch (err) { toast.error(err.response?.data?.message || "Failed to update capacity"); }
   };
   const handleCancelEvent = async (id) => {
     if (!window.confirm("Cancel this event? All registrations and tickets will be cancelled.")) return;
-    try { setError(""); await cancelEventApi(id); fetchAll(); }
-    catch (err) { setError(err.response?.data?.message || "Failed"); }
+    try { await cancelEventApi(id); toast.success("Event cancelled successfully"); fetchAll(); }
+    catch (err) { toast.error(err.response?.data?.message || "Failed to cancel event"); }
   };
 
   const handleViewAttendees = async (eventId) => {
@@ -208,10 +229,32 @@ export default function OrganizerEventManagement() {
     setAttendeeEventId(eventId);
     setAttendeesLoading(true);
     try {
-      const res = await getEventAttendeesApi(eventId);
+      const res = await adminEventRegistrationsApi(eventId);
       setAttendees(res.data.data);
-    } catch { setAttendees(null); }
-    finally { setAttendeesLoading(false); }
+    } catch (err) {
+      setAttendees(null);
+      toast.error(err.response?.data?.message || "Failed to load attendees");
+    } finally {
+      setAttendeesLoading(false);
+    }
+  };
+
+  const handleViewFeedback = async (eventId) => {
+    if (feedbackEventId === eventId) { setFeedbackEventId(null); setFeedbackData(null); return; }
+    // Close attendees panel if open
+    setAttendeeEventId(null);
+    setAttendees(null);
+    setFeedbackEventId(eventId);
+    setFeedbackLoading(true);
+    try {
+      const res = await getEventFeedbackApi(eventId);
+      setFeedbackData(res.data.data);
+    } catch (err) {
+      setFeedbackData(null);
+      toast.error(err.response?.data?.message || "Failed to load feedback");
+    } finally {
+      setFeedbackLoading(false);
+    }
   };
 
   if (loading) return <Loader />;
@@ -252,8 +295,6 @@ export default function OrganizerEventManagement() {
       </div>
 
       <div className="container" style={{ paddingTop: 28 }}>
-        <ErrorMessage message={error} />
-
         {/* Stats strip */}
         <div style={{
           display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 28,
@@ -427,7 +468,10 @@ export default function OrganizerEventManagement() {
                 )}
               </div>
 
-              <ImageUploader label="Cover Image" currentImage={form.image} onImageSelect={(img) => setForm((p) => ({ ...p, image: img }))} />
+              <GalleryUploader
+                images={form.images || []}
+                onChange={(imgs) => setForm((p) => ({ ...p, images: imgs }))}
+              />
 
               <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid #e0e7ff", display: "flex", gap: 10 }}>
                 <button type="submit" className={`btn btn-primary${submitting ? " btn-loading" : ""}`} disabled={submitting || checkingAvailability || availability?.hasApprovedConflict}>
@@ -509,7 +553,21 @@ export default function OrganizerEventManagement() {
                   {/* Body */}
                   <div style={{ padding: "16px 18px", flex: 1, display: "flex", flexDirection: "column", gap: 10 }}>
                     <div>
-                      <h3 style={{ fontSize: 15, fontWeight: 800, color: "var(--text)", margin: 0, lineHeight: 1.3 }}>{ev.title}</h3>
+                      <h3 style={{ fontSize: 15, fontWeight: 800, color: "var(--text)", margin: 0, lineHeight: 1.3 }}>
+                        {(ev.status === "PUBLISHED" || ev.status === "COMPLETED") ? (
+                          <Link
+                            to={ev.status === "COMPLETED" ? `/events/${ev._id}#feedback` : `/events/${ev._id}`}
+                            style={{ color: "inherit", textDecoration: "none" }}
+                            onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
+                            onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
+                            title={ev.status === "COMPLETED" ? "View event & manage feedback" : "View event page"}
+                          >
+                            {ev.title} ↗
+                          </Link>
+                        ) : (
+                          ev.title
+                        )}
+                      </h3>
                       {ev.description && (
                         <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4, lineHeight: 1.5 }}>
                           {ev.description.slice(0, 80)}{ev.description.length > 80 ? "…" : ""}
@@ -568,6 +626,10 @@ export default function OrganizerEventManagement() {
                           style={{ background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe" }}>
                           👥 Attendees
                         </button>
+                        <button onClick={() => handleViewFeedback(ev._id)} className="btn btn-sm"
+                          style={{ background: "#fef3c7", color: "#b45309", border: "1px solid #fde68a" }}>
+                          ⭐ Reviews
+                        </button>
                       </>
                     ) : (
                       <>
@@ -625,6 +687,59 @@ export default function OrganizerEventManagement() {
                                 <span style={{ fontSize: 11, fontWeight: 700, color: reg.ticketStatus === "USED" ? "#16a34a" : "#1d4ed8" }}>
                                   {reg.ticketStatus === "USED" ? "✓ In" : "🎫 Valid"}
                                 </span>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Feedback panel */}
+                  {feedbackEventId === ev._id && (
+                    <div style={{ borderTop: "1px solid #fde68a", background: "#fffbeb", padding: "16px 18px" }}>
+                      <div style={{ fontWeight: 700, fontSize: 13, color: "#b45309", marginBottom: 12 }}>
+                        ⭐ Reviews — {ev.title}
+                      </div>
+                      {feedbackLoading ? (
+                        <div style={{ fontSize: 13, color: "#64748b" }}>Loading…</div>
+                      ) : !feedbackData || feedbackData.reviews.length === 0 ? (
+                        <div style={{ fontSize: 13, color: "#64748b" }}>No reviews yet.</div>
+                      ) : (
+                        <>
+                          {/* Summary */}
+                          {feedbackData.averageRating !== null && (
+                            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14, padding: "12px 14px", background: "#fff", border: "1px solid #fde68a", borderRadius: 8 }}>
+                              <div style={{ fontSize: 28, fontWeight: 900, color: "#b45309" }}>
+                                {feedbackData.averageRating.toFixed(1)}
+                              </div>
+                              <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                                <StarRating value={Math.round(feedbackData.averageRating)} size={16} />
+                                <span style={{ fontSize: 12, color: "#78716c" }}>
+                                  {feedbackData.totalCount} {feedbackData.totalCount === 1 ? "review" : "reviews"}
+                                </span>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Reviews list */}
+                          <div style={{ border: "1px solid #fde68a", borderRadius: 8, overflow: "hidden", background: "#fff", maxHeight: 320, overflowY: "auto" }}>
+                            {feedbackData.reviews.map((review, i) => (
+                              <div key={review._id} style={{ padding: "12px 14px", borderTop: i > 0 ? "1px solid #fef3c7" : "none" }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                                  <span style={{ fontWeight: 700, fontSize: 13, color: "#0f172a" }}>
+                                    {review.userId?.name || "Anonymous"}
+                                  </span>
+                                  <StarRating value={review.rating} size={12} />
+                                  <span style={{ fontSize: 11, color: "#94a3b8", marginLeft: "auto" }}>
+                                    {new Date(review.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                                  </span>
+                                </div>
+                                {review.review && (
+                                  <p style={{ fontSize: 13, color: "#475569", margin: 0, lineHeight: 1.5 }}>
+                                    {review.review}
+                                  </p>
+                                )}
                               </div>
                             ))}
                           </div>

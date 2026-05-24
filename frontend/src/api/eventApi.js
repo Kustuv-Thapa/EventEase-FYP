@@ -14,3 +14,4 @@ export const adminApproveEventApi = (id) => axiosInstance.patch(`/events/${id}/a
 export const adminRejectEventApi = (id, reason) => axiosInstance.patch(`/events/${id}/reject`, { reason });
 export const updateCapacityApi = (id, capacity) => axiosInstance.patch(`/events/${id}/capacity`, { capacity });
 export const cancelEventApi = (id) => axiosInstance.patch(`/events/${id}/cancel`);
+export const updateEventGalleryApi = (id, images) => axiosInstance.patch(`/events/${id}/gallery`, { images });

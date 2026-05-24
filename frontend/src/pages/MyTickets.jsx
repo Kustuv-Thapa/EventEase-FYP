@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { getMyTicketsApi } from "../api/ticketApi";
+import toast from "react-hot-toast";
 import Loader from "../components/Loader";
-import ErrorMessage from "../components/ErrorMessage";
 import EmptyState from "../components/EmptyState";
 
 const STATUS_CONFIG = {
@@ -67,14 +67,13 @@ const PAGE_SIZE = 5;
 const MyTickets = () => {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [expandedQr, setExpandedQr] = useState(null);
   const [page, setPage] = useState(1);
 
   useEffect(() => {
     getMyTicketsApi()
       .then((res) => setTickets(res.data.data || []))
-      .catch(() => setError("Failed to load tickets"))
+      .catch((err) => toast.error(err.response?.data?.message || "Failed to load tickets"))
       .finally(() => setLoading(false));
   }, []);
 
@@ -90,8 +89,6 @@ const MyTickets = () => {
       </div>
 
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "28px 24px" }}>
-        <ErrorMessage message={error} />
-
         {tickets.length === 0 ? (
           <EmptyState
             icon="🎫"
@@ -105,6 +102,7 @@ const MyTickets = () => {
               const event = ticket.event;
               const startDate = event?.schedule?.startDateTime ? new Date(event.schedule.startDateTime) : null;
               const isExpanded = expandedQr === ticket._id;
+              const isPastEvent = event?.status === "COMPLETED" || event?.status === "CANCELLED";
               const cfg = STATUS_CONFIG[ticket.status] || STATUS_CONFIG.VALID;
 
               return (
@@ -136,7 +134,14 @@ const MyTickets = () => {
                         <h3 style={{ fontSize: 17, fontWeight: 800, color: "var(--text)", margin: 0 }}>
                           {event?.title || "Event"}
                         </h3>
-                        <span className={`badge badge-${ticket.status?.toLowerCase()}`}>{cfg.icon} {cfg.label}</span>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                          {isPastEvent && ticket.status === "VALID" && (
+                            <span style={{ background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe", borderRadius: 999, padding: "3px 10px", fontSize: 11, fontWeight: 700 }}>
+                              🏁 Past Event
+                            </span>
+                          )}
+                          <span className={`badge badge-${ticket.status?.toLowerCase()}`}>{cfg.icon} {cfg.label}</span>
+                        </div>
                       </div>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 20px", marginBottom: 10 }}>
                         {event?.venue?.name && (
@@ -169,7 +174,7 @@ const MyTickets = () => {
                       >
                         {isExpanded ? "Hide QR" : "Show QR"}
                       </button>
-                      {ticket.status === "VALID" && (
+                      {ticket.status === "VALID" && !isPastEvent && (
                         <button
                           onClick={() => downloadTicket(ticket)}
                           style={{

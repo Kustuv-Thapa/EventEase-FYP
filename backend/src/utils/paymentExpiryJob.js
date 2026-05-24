@@ -28,19 +28,22 @@ const expireStalePayments = async () => {
     if (staleRegs.length === 0) return;
 
     for (const reg of staleRegs) {
-      // Check if a successful payment exists — if so, skip (khalti verify may be in progress)
-      const successPayment = await Payment.findOne({
+      // Skip if there is ANY active payment — either:
+      //   "success"  → payment verified, registration should already be confirmed
+      //   "pending"  → user is still on the Khalti payment page or verification is
+      //                in-flight; cancelling now would lose a real payment
+      const activePayment = await Payment.findOne({
         registrationId: reg._id,
-        status: "success",
+        status: { $in: ["success", "pending"] },
       });
-      if (successPayment) continue;
+      if (activePayment) continue;
 
-      // Cancel the registration
+      // No active payment — safe to expire this registration
       await Registration.updateOne({ _id: reg._id }, { $set: { status: "cancelled" } });
 
-      // Mark any pending payments as failed
+      // Mark any failed/unknown payments as failed for record-keeping
       await Payment.updateMany(
-        { registrationId: reg._id, status: "pending" },
+        { registrationId: reg._id, status: { $nin: ["success", "refunded"] } },
         { $set: { status: "failed" } }
       );
 

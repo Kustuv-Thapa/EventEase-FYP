@@ -13,6 +13,7 @@ import UserProfile from "../pages/UserProfile";
 import VerifyTicket from "../pages/VerifyTicket";
 import VenueList from "../pages/VenueList";
 import OrganizerEventManagement from "../pages/OrganizerEventManagement";
+import OrganizerAnalyticsDashboard from "../pages/OrganizerAnalyticsDashboard";
 import AdminDashboard from "../pages/AdminDashboard";
 import AdminVenueManagement from "../pages/AdminVenueManagement";
 import Unauthorized from "../pages/Unathorized";
@@ -52,6 +53,7 @@ const AppRoutes = () => {
 
         <Route element={<ProtectedRoute allowedRoles={["ORGANIZER"]} />}>
           <Route path="organizer/events" element={<OrganizerEventManagement />} />
+          <Route path="organizer/analytics" element={<OrganizerAnalyticsDashboard />} />
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={["ADMIN"]} />}>

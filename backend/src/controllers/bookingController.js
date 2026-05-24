@@ -90,6 +90,10 @@ exports.createBooking = async (req, res, next) => {
     const start = toDate(startDateTime);
     const end = toDate(endDateTime);
 
+    // Collect result outside the transaction callback so we can respond after commit
+    let createdBooking = null;
+    let hasPendingOverlap = false;
+
     // Transaction protects against race conditions
     await session.withTransaction(async () => {
       const venue = await Venue.findById(venueId).session(session);
@@ -100,9 +104,9 @@ exports.createBooking = async (req, res, next) => {
       if (approvedOverlap) throw Object.assign(new Error("Venue is already booked for that time range"), { statusCode: 409 });
 
       // Soft check: other pending requests exist — still allow, admin will decide
-      const pendingOverlap = await hasOverlap({ venueId, start, end, session, includesPending: true });
+      hasPendingOverlap = await hasOverlap({ venueId, start, end, session, includesPending: true });
 
-      const booking = await Booking.create(
+      const [booking] = await Booking.create(
         [
           {
             venue: venueId,
@@ -117,23 +121,29 @@ exports.createBooking = async (req, res, next) => {
         { session }
       );
 
-      res.status(201).json({
-        message: "Booking requested (pending approval)",
-        data: booking[0],
-        warning: pendingOverlap
-          ? "Note: another booking request exists for an overlapping time slot. The admin will decide which to approve."
-          : null,
-      });
+      createdBooking = booking;
+    });
+
+    // Respond AFTER the transaction has committed
+    res.status(201).json({
+      success: true,
+      message: "Booking requested (pending approval)",
+      data: createdBooking,
+      warning: hasPendingOverlap
+        ? "Note: another booking request exists for an overlapping time slot. The admin will decide which to approve."
+        : null,
     });
   } catch (err) {
-    // If not replica set, transaction will fail.
+    // If not replica set, transaction will fail — surface a clear message
     if (err.message?.includes("Transaction numbers") || err.message?.includes("replica set")) {
       return res.status(500).json({
-        message:
-          "Transactions require MongoDB replica set. Enable it for race-condition-safe booking.",
+        success: false,
+        message: "Transactions require MongoDB replica set. Enable it for race-condition-safe booking.",
       });
     }
-    res.status(err.statusCode || 500).json({ message: err.message || "Failed to create booking" });
+    // Delegate to global error handler for consistent shape
+    if (err.statusCode) res.status(err.statusCode);
+    next(err);
   } finally {
     session.endSession();
   }

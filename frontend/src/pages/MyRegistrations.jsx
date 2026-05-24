@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { getMyRegistrationsApi, cancelMyRegistrationApi } from "../api/registrationApi";
 import { initiateKhaltiPaymentApi } from "../api/khaltiApi";
+import toast from "react-hot-toast";
 import Loader from "../components/Loader";
-import ErrorMessage from "../components/ErrorMessage";
 import EmptyState from "../components/EmptyState";
 
 const STATUS_CONFIG = {
@@ -18,7 +19,6 @@ const PAGE_SIZE = 5;
 const MyRegistrations = () => {
   const [registrations, setRegistrations] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [activeFilter, setActiveFilter] = useState("All");
   const [cancelling, setCancelling] = useState(null);
   const [page, setPage] = useState(1);
@@ -27,8 +27,8 @@ const MyRegistrations = () => {
     try {
       const res = await getMyRegistrationsApi();
       setRegistrations(res.data.data || []);
-    } catch {
-      setError("Failed to fetch registrations");
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to fetch registrations");
     } finally {
       setLoading(false);
     }
@@ -44,7 +44,7 @@ const MyRegistrations = () => {
       const payRes = await initiateKhaltiPaymentApi(regId);
       window.location.href = payRes.data.payment_url;
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to initiate payment");
+      toast.error(err.response?.data?.message || "Failed to initiate payment");
       setPaying(null);
     }
   };
@@ -54,9 +54,10 @@ const MyRegistrations = () => {
     setCancelling(regId);
     try {
       await cancelMyRegistrationApi(regId);
+      toast.success("Registration cancelled.");
       fetchData();
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to cancel registration");
+      toast.error(err.response?.data?.message || "Failed to cancel registration");
     } finally {
       setCancelling(null);
     }
@@ -93,7 +94,6 @@ const MyRegistrations = () => {
       </div>
 
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "28px 24px" }}>
-        <ErrorMessage message={error} />
 
         {/* Stats row */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 28 }}>
@@ -173,7 +173,18 @@ const MyRegistrations = () => {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 8 }}>
                         <h3 style={{ fontSize: 16, fontWeight: 800, color: "var(--text)", margin: 0, lineHeight: 1.3 }}>
-                          {reg.eventId?.title || "Deleted Event"}
+                          {reg.eventId ? (
+                            <Link
+                              to={`/events/${reg.eventId._id}`}
+                              style={{ color: "inherit", textDecoration: "none" }}
+                              onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
+                              onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
+                            >
+                              {reg.eventId.title}
+                            </Link>
+                          ) : (
+                            "Deleted Event"
+                          )}
                         </h3>
                         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
                           {!reg.eventId && (
@@ -214,17 +225,35 @@ const MyRegistrations = () => {
                       )}
 
                       {reg.status === "confirmed" && (
-                        <button
-                          onClick={() => handleCancel(reg._id)}
-                          disabled={cancelling === reg._id}
-                          style={{
-                            padding: "6px 14px", borderRadius: 8, border: "1px solid var(--danger)",
-                            background: "var(--surface)", color: "var(--danger)", fontSize: 12, fontWeight: 700,
-                            cursor: "pointer",
-                          }}
-                        >
-                          {cancelling === reg._id ? "Cancelling..." : "Cancel Registration"}
-                        </button>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          {reg.eventId?.status === "COMPLETED" && (
+                            <Link
+                              to={`/events/${reg.eventId._id}#feedback`}
+                              style={{
+                                padding: "6px 14px", borderRadius: 8,
+                                border: "none",
+                                background: "linear-gradient(135deg, #6366f1, #4f46e5)",
+                                color: "#fff", fontSize: 12, fontWeight: 700,
+                                textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 5,
+                              }}
+                            >
+                              ⭐ Leave Feedback
+                            </Link>
+                          )}
+                          {reg.eventId?.status !== "COMPLETED" && reg.eventId?.status !== "CANCELLED" && (
+                            <button
+                              onClick={() => handleCancel(reg._id)}
+                              disabled={cancelling === reg._id}
+                              style={{
+                                padding: "6px 14px", borderRadius: 8, border: "1px solid var(--danger)",
+                                background: "var(--surface)", color: "var(--danger)", fontSize: 12, fontWeight: 700,
+                                cursor: "pointer",
+                              }}
+                            >
+                              {cancelling === reg._id ? "Cancelling..." : "Cancel Registration"}
+                            </button>
+                          )}
+                        </div>
                       )}
                       {reg.status === "pending" && reg.eventId?.pricing?.type === "PAID" && reg.eventId?.status !== "CANCELLED" && reg.eventId?.status !== "COMPLETED" && reg.eventId && (
                         <button

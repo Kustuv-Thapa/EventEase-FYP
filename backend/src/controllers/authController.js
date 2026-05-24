@@ -175,9 +175,11 @@ const login = async (req, res, next) => {
       throw new Error("Invalid credentials");
     }
 
+    // Check verification AFTER password check so we don't reveal whether
+    // an email exists via a different error message (email enumeration).
     if (!user.isVerified) {
-      res.status(403);
-      throw new Error("Please verify your email before logging in. Check your inbox for the OTP.");
+      res.status(401);
+      throw new Error("Invalid credentials");
     }
 
     const token = signToken({ sub: user._id.toString(), role: user.role });

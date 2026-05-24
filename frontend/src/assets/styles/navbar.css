@@ -215,78 +215,23 @@
 }
 
 /* --------------------------------------------------------------------------
-   Footer
+   Footer — styles now handled inline in Footer.jsx for the new design.
+   Keeping only the responsive grid breakpoint here.
    -------------------------------------------------------------------------- */
 
 .footer {
-  background: #f8fafc;
-  border-top: 1px solid #e2e8f0;
-  padding: 24px 28px;
+  background: #0f172a;
+  border-top: 1px solid #1e293b;
 }
 
-.footer-inner {
-  max-width: 1200px;
-  margin: 0 auto;
-  display: flex;
-  flex-direction: row;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 16px;
-}
-
-.footer-brand {
-  display: flex;
-  align-items: center;
-  gap: 24px;
-}
-
-.footer-brand-name {
-  color: #0f172a;
-  font-weight: 900;
-  font-size: 16px;
-  letter-spacing: -0.3px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.footer-brand-icon {
-  color: #6366f1;
-}
-
-.footer-nav {
-  display: flex;
-  gap: 4px;
-}
-
-.footer-nav-link {
-  color: #64748b;
-  font-size: 13px;
-  text-decoration: none;
-  padding: 4px 10px;
-  border-radius: 6px;
-  transition: color 0.15s;
-}
-
-.footer-nav-link:hover {
-  color: #334155;
-}
-
-.footer-copy {
-  font-size: 12px;
-  color: #94a3b8;
-  margin: 0;
+@media (max-width: 900px) {
+  .footer-grid {
+    grid-template-columns: 1fr 1fr !important;
+  }
 }
 
 @media (max-width: 600px) {
-  .footer-inner {
-    flex-direction: column;
-    text-align: center;
-  }
-
-  .footer-brand {
-    flex-direction: column;
-    gap: 12px;
+  .footer-grid {
+    grid-template-columns: 1fr !important;
   }
 }

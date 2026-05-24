@@ -28,11 +28,10 @@ const bookingSchema = new mongoose.Schema(
 // Core overlap query needs these indexes
 bookingSchema.index({ venue: 1, startDateTime: 1, endDateTime: 1, status: 1 });
 
-// Basic time sanity
-// Basic time sanity
-bookingSchema.pre("validate", async function () {
+// Basic time sanity — use this.invalidate() so Mongoose emits a proper ValidationError
+bookingSchema.pre("validate", function () {
   if (this.startDateTime && this.endDateTime && this.startDateTime >= this.endDateTime) {
-    throw new Error("endDateTime must be greater than startDateTime");
+    this.invalidate("endDateTime", "endDateTime must be greater than startDateTime");
   }
 });
 

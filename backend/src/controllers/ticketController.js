@@ -127,6 +127,32 @@ const verifyTicket = async (req, res, next) => {
       });
     }
 
+    // Block check-in for completed or cancelled events
+    if (ticket.event.status === "COMPLETED") {
+      return res.status(400).json({
+        success: false,
+        message: "This event has already ended — check-in is no longer available",
+        data: ticket,
+      });
+    }
+    if (ticket.event.status === "CANCELLED") {
+      return res.status(400).json({
+        success: false,
+        message: "This event has been cancelled — check-in is not available",
+        data: ticket,
+      });
+    }
+
+    // Prevent check-in before the event has started
+    const eventStart = ticket.event?.schedule?.startDateTime;
+    if (eventStart && new Date() < new Date(eventStart)) {
+      return res.status(400).json({
+        success: false,
+        message: `Event has not started yet. Check-in opens at ${new Date(eventStart).toLocaleString("en-US", { dateStyle: "long", timeStyle: "short" })}`,
+        data: ticket,
+      });
+    }
+
     ticket.status = "USED";
     await ticket.save();
 

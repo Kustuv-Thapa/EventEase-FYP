@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { getVenuesApi } from "../api/venueApi";
 import VenueCard from "../components/VenueCard";
 import Loader from "../components/Loader";
-import ErrorMessage from "../components/ErrorMessage";
+import toast from "react-hot-toast";
 import EmptyState from "../components/EmptyState";
 import useAuth from "../hooks/useAuth";
 
@@ -13,14 +13,13 @@ const VenueList = () => {
   const { user } = useAuth();
   const [venues, setVenues] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
 
   useEffect(() => {
     getVenuesApi()
       .then((res) => setVenues(res.data.data || []))
-      .catch(() => setError("Failed to fetch venues"))
+      .catch(() => toast.error("Failed to fetch venues"))
       .finally(() => setLoading(false));
   }, []);
 
@@ -71,8 +70,6 @@ const VenueList = () => {
             </div>
           </div>
         )}
-
-        <ErrorMessage message={error} />
 
         {filtered.length === 0 ? (
           <EmptyState

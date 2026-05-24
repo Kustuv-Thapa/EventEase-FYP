@@ -4,7 +4,8 @@ const Registration = require("../models/Registration");
 const Ticket = require("../models/Ticket");
 const Payment = require("../models/Payment");
 const { createTicket } = require("./ticketController");
-const { sendRegistrationConfirmationEmail, sendTicketIssuedEmail, sendRegistrationCancelledEmail } = require("../utils/emailService");
+const { sendRegistrationConfirmationEmail, sendRegistrationCancelledEmail } = require("../utils/emailService");
+const { initiateKhaltiRefund } = require("./khaltiController");
 
 // POST /api/registrations/events/:eventId
 // User registers for an event — supports re-registration after cancellation
@@ -205,6 +206,13 @@ const cancelMyRegistration = async (req, res, next) => {
       throw new Error("Only pending or confirmed registrations can be cancelled");
     }
 
+    // Block cancellation for completed or cancelled events
+    const event = await Event.findById(reg.eventId).select("status");
+    if (event && event.status === "COMPLETED") {
+      res.status(400);
+      throw new Error("Cannot cancel a registration for a completed event.");
+    }
+
     reg.status = "cancelled";
     await reg.save();
 
@@ -212,11 +220,20 @@ const cancelMyRegistration = async (req, res, next) => {
     if (isConfirmed) {
       await Event.findByIdAndUpdate(reg.eventId, { $inc: { confirmedCount: -1 } });
       await Ticket.updateOne({ registration: reg._id }, { $set: { status: "CANCELLED" } });
-      // Mark successful payment as refunded so re-registration can pay again
-      await Payment.updateMany(
-        { registrationId: reg._id, status: "success" },
-        { $set: { status: "refunded" } }
-      );
+      // Mark successful payment as refunded and trigger Khalti refund
+      const successPayment = await Payment.findOne({ registrationId: reg._id, status: "success" });
+      if (successPayment) {
+        await Payment.updateOne({ _id: successPayment._id }, { $set: { status: "refunded" } });
+        // Initiate Khalti refund non-blocking — failure is logged but must not break the response
+        if (successPayment.transactionId) {
+          initiateKhaltiRefund(successPayment.transactionId);
+        }
+      } else {
+        await Payment.updateMany(
+          { registrationId: reg._id, status: "success" },
+          { $set: { status: "refunded" } }
+        );
+      }
     }
 
     // For pending paid registrations: cancel any pending payment records too
@@ -313,6 +330,20 @@ const adminDecideRegistration = async (req, res, next) => {
       throw new Error(`Registration already ${reg.status}`);
     }
 
+    // ── For paid events: verify payment BEFORE mutating anything ──
+    let ticket = null;
+    if (status === "confirmed") {
+      const event = await Event.findById(reg.eventId);
+      if (event?.pricing?.type === "PAID") {
+        const paid = await Payment.findOne({ registrationId: reg._id, status: "success" });
+        if (!paid) {
+          res.status(400);
+          throw new Error("Cannot confirm a paid registration without a successful payment");
+        }
+      }
+    }
+
+    // ── Now safe to mutate ──
     reg.status = status;
     if (typeof note === "string") reg.note = note.trim().slice(0, 500);
     reg.decidedBy = req.user.id;
@@ -320,23 +351,25 @@ const adminDecideRegistration = async (req, res, next) => {
 
     const updated = await reg.save();
 
-    let ticket = null;
     if (status === "confirmed") {
-      // For paid events, only confirm if payment exists
-      const event = await Event.findById(updated.eventId);
-      if (event?.pricing?.type === "PAID") {
-        const paid = await Payment.findOne({ registrationId: updated._id, status: "success" });
-        if (!paid) {
-          res.status(400);
-          throw new Error("Cannot confirm a paid registration without a successful payment");
-        }
+      // Use findOneAndUpdate with a status guard to prevent double-increment
+      // if this endpoint is somehow called twice concurrently.
+      const incResult = await Event.findOneAndUpdate(
+        { _id: updated.eventId },
+        { $inc: { confirmedCount: 1 } },
+        { new: true }
+      );
+      try {
+        ticket = await createTicket({
+          userId: updated.userId,
+          eventId: updated.eventId,
+          registrationId: updated._id,
+        });
+      } catch (ticketErr) {
+        // Roll back the confirmedCount increment if ticket creation fails
+        await Event.findByIdAndUpdate(updated.eventId, { $inc: { confirmedCount: -1 } });
+        throw ticketErr;
       }
-      await Event.findByIdAndUpdate(updated.eventId, { $inc: { confirmedCount: 1 } });
-      ticket = await createTicket({
-        userId: updated.userId,
-        eventId: updated.eventId,
-        registrationId: updated._id,
-      });
     }
 
     // Notify attendee of admin decision (non-blocking)
@@ -421,6 +454,19 @@ const adminEventRegistrations = async (req, res, next) => {
     if (!mongoose.Types.ObjectId.isValid(eventId)) {
       res.status(400);
       throw new Error("Invalid eventId");
+    }
+
+    // Ownership check: organizers may only view registrations for their own events
+    if (req.user.role === "ORGANIZER") {
+      const event = await Event.findById(eventId).select("organizerId");
+      if (!event) {
+        res.status(404);
+        throw new Error("Event not found");
+      }
+      if (event.organizerId.toString() !== req.user.id) {
+        res.status(403);
+        throw new Error("You do not have permission to view registrations for this event");
+      }
     }
 
     const registrations = await Registration.find({ eventId })

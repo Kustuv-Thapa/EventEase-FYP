@@ -17,6 +17,3 @@ export const approveRegistrationApi = (registrationId, data) =>
 
 export const adminEventRegistrationsApi = (eventId) =>
   axiosInstance.get(`/registrations/admin/event/${eventId}`);
-
-export const getEventAttendeesApi = (eventId) =>
-  axiosInstance.get(`/registrations/admin/event/${eventId}`);

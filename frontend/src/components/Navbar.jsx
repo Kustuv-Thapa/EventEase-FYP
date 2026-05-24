@@ -35,6 +35,7 @@ const Navbar = () => {
       {user?.role === "ORGANIZER" && (
         <>
           <NavLink to="/organizer/events" className={({ isActive }) => (isActive ? "active" : "")} aria-current={location.pathname === "/organizer/events" ? "page" : undefined}>My Events</NavLink>
+          <NavLink to="/organizer/analytics" className={({ isActive }) => (isActive ? "active" : "")} aria-current={location.pathname === "/organizer/analytics" ? "page" : undefined}>Analytics</NavLink>
           <NavLink to="/verify-ticket" className={({ isActive }) => (isActive ? "active" : "")} aria-current={location.pathname === "/verify-ticket" ? "page" : undefined}>Verify Ticket</NavLink>
         </>
       )}

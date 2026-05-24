@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { verifyTicketApi } from "../api/ticketApi";
-import ErrorMessage from "../components/ErrorMessage";
+import toast from "react-hot-toast";
 
 const RESULT_STYLE = {
   success:   { bg: "var(--success-light)",  border: "var(--success)",  color: "var(--success)",  icon: "✅" },
@@ -21,21 +21,19 @@ const getResultStyle = (result) => {
 const VerifyTicket = () => {
   const [ticketId, setTicketId] = useState("");
   const [result, setResult] = useState(null);
-  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [scannerActive, setScannerActive] = useState(false);
-  const [cameraError, setCameraError] = useState("");
   const scannerRef = useRef(null);
   const scannerInstanceRef = useRef(null);
 
   const doVerify = async (id) => {
     if (!id?.trim()) return;
-    setError(""); setResult(null); setLoading(true);
+    setResult(null); setLoading(true);
     try {
       const res = await verifyTicketApi(id.trim());
       setResult(res.data);
     } catch (err) {
-      setError(err.response?.data?.message || "Verification failed");
+      toast.error(err.response?.data?.message || "Verification failed");
     } finally {
       setLoading(false);
     }
@@ -47,7 +45,6 @@ const VerifyTicket = () => {
   };
 
   const startScanner = async () => {
-    setCameraError("");
     setScannerActive(true);
   };
 
@@ -93,7 +90,7 @@ const VerifyTicket = () => {
             // Ignore scan errors (camera still scanning)
             const errMsg = typeof err === "string" ? err : err?.message || "";
             if (errMsg.includes("permission")) {
-              setCameraError("Camera access denied. Please use manual entry.");
+              toast.error("Camera access denied. Please use manual entry.");
               stopScanner();
             }
           }
@@ -101,7 +98,7 @@ const VerifyTicket = () => {
 
         scannerInstanceRef.current = scanner;
       } catch {
-        setCameraError("Failed to initialize camera scanner.");
+        toast.error("Failed to initialize camera scanner.");
         setScannerActive(false);
       }
     };
@@ -131,8 +128,6 @@ const VerifyTicket = () => {
       </div>
 
       <div style={{ maxWidth: 600, margin: "0 auto", padding: "32px 24px" }}>
-        <ErrorMessage message={error} />
-        {cameraError && <ErrorMessage message={cameraError} />}
 
         {/* Scanner section */}
         <div style={{

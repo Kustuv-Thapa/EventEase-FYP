@@ -1,10 +1,13 @@
-import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { useParams, Link, useLocation } from "react-router-dom";
 import { getEventByIdApi } from "../api/eventApi";
 import { registerForEventApi } from "../api/registrationApi";
 import { initiateKhaltiPaymentApi } from "../api/khaltiApi";
+import { getEventFeedbackApi } from "../api/feedbackApi";
 import Loader from "../components/Loader";
-import ErrorMessage from "../components/ErrorMessage";
+import toast from "react-hot-toast";
+import FeedbackList from "../components/FeedbackList";
+import FeedbackForm from "../components/FeedbackForm";
 import useAuth from "../hooks/useAuth";
 
 const fmt = (d, opts) => d ? new Date(d).toLocaleString("en-US", opts) : "—";
@@ -29,18 +32,53 @@ const InfoCard = ({ icon, label, children }) => (
 
 export default function EventDetails() {
   const { id } = useParams();
+  const { hash } = useLocation();
   const { isAuthenticated, user } = useAuth();
+  const feedbackRef = useRef(null);
   const [event, setEvent] = useState(null);
   const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
   const [registering, setRegistering] = useState(false);
   const [fetchError, setFetchError] = useState("");
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [userFeedback, setUserFeedback] = useState(null);
 
   useEffect(() => {
     getEventByIdApi(id)
       .then((res) => setEvent(res.data.data))
-      .catch(() => setFetchError("Failed to fetch event details"));
+      .catch((err) => {
+        const status = err.response?.status;
+        if (status === 404) {
+          setFetchError("This event doesn't exist or is no longer available.");
+        } else {
+          setFetchError(err.response?.data?.message || "Failed to load event details. Please try again.");
+        }
+      });
   }, [id]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !user) {
+      setUserFeedback(null);
+      return;
+    }
+    getEventFeedbackApi(id)
+      .then((res) => {
+        const reviews = res.data.data?.reviews ?? [];
+        const existing = reviews.find(
+          (r) => r.userId?._id?.toString() === (user.id || user._id)
+        );
+        setUserFeedback(existing ?? null);
+      })
+      .catch(() => {
+        setUserFeedback(null);
+      });
+  }, [id, refreshTrigger, isAuthenticated, user?.id, user?._id]);
+
+  // Scroll to feedback section when navigated with #feedback hash
+  useEffect(() => {
+    if (hash === "#feedback" && feedbackRef.current) {
+      feedbackRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [hash, event]);
 
   const handleRegister = async () => {
     try {
@@ -48,14 +86,18 @@ export default function EventDetails() {
       const res = await registerForEventApi(id);
       if (res.data.requiresPayment) {
         const regId = res.data.data.registration._id;
-        const payRes = await initiateKhaltiPaymentApi(regId);
-        window.location.href = payRes.data.payment_url;
+        try {
+          const payRes = await initiateKhaltiPaymentApi(regId);
+          window.location.href = payRes.data.payment_url;
+        } catch (payErr) {
+          toast.error(payErr.response?.data?.message || "Payment initiation failed. Please try again.");
+          setMessage("");
+        }
         return;
       }
       setMessage("You're registered! Your ticket has been issued.");
-      setError("");
     } catch (err) {
-      setError(err.response?.data?.message || "Registration failed");
+      toast.error(err.response?.data?.message || "Registration failed");
       setMessage("");
     } finally {
       setRegistering(false);
@@ -163,6 +205,35 @@ export default function EventDetails() {
                   About this event
                 </h2>
                 <p style={{ color: "#475569", lineHeight: 1.85, fontSize: 15 }}>{event.description}</p>
+              </div>
+            )}
+
+            {/* Photo Gallery */}
+            {event.images?.length > 1 && (
+              <div style={{ background: "#fff", borderRadius: 16, padding: "24px 26px", border: "1px solid #e2e8f0", boxShadow: "0 1px 4px rgba(0,0,0,0.05)" }}>
+                <h2 style={{ fontSize: 16, fontWeight: 800, color: "#0f172a", marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ width: 4, height: 18, background: "#6366f1", borderRadius: 4, display: "inline-block" }} />
+                  Photos
+                </h2>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 10 }}>
+                  {event.images.map((img, i) => (
+                    <div key={i} style={{ position: "relative", borderRadius: 10, overflow: "hidden", aspectRatio: "4/3" }}>
+                      <img
+                        src={img}
+                        alt={`${event.title} photo ${i + 1}`}
+                        style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                      />
+                      {i === 0 && (
+                        <div style={{
+                          position: "absolute", bottom: 0, left: 0, right: 0,
+                          background: "rgba(99,102,241,0.75)", color: "#fff",
+                          fontSize: 9, fontWeight: 700, textAlign: "center", padding: "3px 0",
+                          textTransform: "uppercase", letterSpacing: "0.05em",
+                        }}>Cover</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -287,7 +358,6 @@ export default function EventDetails() {
                     <span style={{ fontSize: 14, color: "#15803d", fontWeight: 600 }}>{message}</span>
                   </div>
                 )}
-                <ErrorMessage message={error} />
 
                 {!isAuthenticated ? (
                   <div style={{ textAlign: "center" }}>
@@ -354,6 +424,39 @@ export default function EventDetails() {
           </div>
         </div>
       </div>
+
+      {/* ── Feedback Section (completed events only) ── */}
+      {event.status === "COMPLETED" && (
+        <div ref={feedbackRef} id="feedback" style={{ maxWidth: 900, margin: "0 auto", padding: "0 24px 48px" }}>
+          <div style={{
+            background: "#fff", borderRadius: 16, padding: "28px 30px",
+            border: "1px solid #e2e8f0", boxShadow: "0 1px 4px rgba(0,0,0,0.05)",
+          }}>
+            <h2 style={{
+              fontSize: 18, fontWeight: 800, color: "#0f172a",
+              marginBottom: 24, display: "flex", alignItems: "center", gap: 8,
+            }}>
+              <span style={{ width: 4, height: 20, background: "#6366f1", borderRadius: 4, display: "inline-block" }} />
+              Reviews &amp; Ratings
+            </h2>
+
+            <FeedbackList eventId={id} refreshTrigger={refreshTrigger} organizerId={organizerId?.toString()} />
+
+            {isAuthenticated && user?.role !== "ADMIN" && !isOwner && (
+              <div style={{ marginTop: 28, paddingTop: 24, borderTop: "1px solid #e2e8f0" }}>
+                <h3 style={{ fontSize: 15, fontWeight: 700, color: "#0f172a", marginBottom: 16 }}>
+                  {userFeedback ? "Edit Your Review" : "Leave a Review"}
+                </h3>
+                <FeedbackForm
+                  eventId={id}
+                  existingFeedback={userFeedback}
+                  onSuccess={() => setRefreshTrigger((t) => t + 1)}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import useAuth from "../hooks/useAuth";
 import { getEventsApi } from "../api/eventApi";
+import toast from "react-hot-toast";
 import EventCard from "../components/EventCard";
 import EmptyState from "../components/EmptyState";
 
@@ -12,7 +13,7 @@ const Home = () => {
   useEffect(() => {
     getEventsApi()
       .then((res) => setFeaturedEvents((res.data.data?.items || []).slice(0, 3)))
-      .catch(() => {});
+      .catch((err) => toast.error(err.response?.data?.message || "Failed to load events"));
   }, []);
 
   return (

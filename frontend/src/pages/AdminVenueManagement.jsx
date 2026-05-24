@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { getAdminVenuesApi, createVenueApi, updateVenueApi, deleteVenueApi, uploadVenueImageApi } from "../api/venueApi";
-import ErrorMessage from "../components/ErrorMessage";
+import toast from "react-hot-toast";
 import Loader from "../components/Loader";
 import ImageUploader from "../components/ImageUploader";
 import EmptyState from "../components/EmptyState";
@@ -63,7 +63,6 @@ const VenueForm = ({ form, onChange, onSubmit, onCancel, submitting, title }) =>
 export default function AdminVenueManagement() {
   const [venues, setVenues] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
@@ -73,7 +72,7 @@ export default function AdminVenueManagement() {
 
   const fetchVenues = async () => {
     try { const res = await getAdminVenuesApi(); setVenues(res.data.data || []); }
-    catch { setError("Failed to load venues"); }
+    catch (err) { toast.error(err.response?.data?.message || "Failed to load venues"); }
     finally { setLoading(false); }
   };
 
@@ -84,7 +83,7 @@ export default function AdminVenueManagement() {
   const closeForm = () => { setShowForm(false); setEditingVenue(null); setForm(EMPTY_FORM); };
 
   const handleCreate = async (e) => {
-    e.preventDefault(); setError(""); setSubmitting(true);
+    e.preventDefault(); setSubmitting(true);
     try {
       const res = await createVenueApi({
         name: form.name, capacity: Number(form.capacity),
@@ -92,8 +91,9 @@ export default function AdminVenueManagement() {
         amenities: form.amenities ? form.amenities.split(",").map((a) => a.trim()).filter(Boolean) : [],
       });
       if (form.image?.startsWith("data:image/")) await uploadVenueImageApi(res.data.data._id, form.image);
+      toast.success("Venue created successfully!");
       closeForm(); fetchVenues();
-    } catch (err) { setError(err.response?.data?.message || "Failed to create venue"); }
+    } catch (err) { toast.error(err.response?.data?.message || "Failed to create venue"); }
     finally { setSubmitting(false); }
   };
 
@@ -105,7 +105,7 @@ export default function AdminVenueManagement() {
   };
 
   const handleUpdate = async (e) => {
-    e.preventDefault(); setError(""); setSubmitting(true);
+    e.preventDefault(); setSubmitting(true);
     try {
       await updateVenueApi(editingVenue, {
         name: form.name, capacity: Number(form.capacity),
@@ -113,21 +113,22 @@ export default function AdminVenueManagement() {
         amenities: form.amenities ? form.amenities.split(",").map((a) => a.trim()).filter(Boolean) : [],
       });
       if (form.image?.startsWith("data:image/")) await uploadVenueImageApi(editingVenue, form.image);
+      toast.success("Venue updated successfully!");
       closeForm(); fetchVenues();
-    } catch (err) { setError(err.response?.data?.message || "Failed to update venue"); }
+    } catch (err) { toast.error(err.response?.data?.message || "Failed to update venue"); }
     finally { setSubmitting(false); }
   };
 
   const handleVenueImageUpdate = async (venueId, image) => {
-    try { setError(""); await uploadVenueImageApi(venueId, image); fetchVenues(); }
-    catch (err) { setError(err.response?.data?.message || "Failed to update image"); }
+    try { await uploadVenueImageApi(venueId, image); toast.success("Image updated successfully!"); fetchVenues(); }
+    catch (err) { toast.error(err.response?.data?.message || "Failed to update image"); }
     finally { setUploadingImageFor(null); }
   };
 
   const handleDelete = async (id) => {
     if (!window.confirm("Delete this venue?")) return;
-    try { await deleteVenueApi(id); fetchVenues(); }
-    catch (err) { setError(err.response?.data?.message || "Failed to delete venue"); }
+    try { await deleteVenueApi(id); toast.success("Venue deleted successfully!"); fetchVenues(); }
+    catch (err) { toast.error(err.response?.data?.message || "Failed to delete venue"); }
   };
 
   if (loading) return <Loader />;
@@ -158,8 +159,6 @@ export default function AdminVenueManagement() {
       </div>
 
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: "28px 24px" }}>
-        <ErrorMessage message={error} />
-
         {/* Stats */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginBottom: 28 }}>
           {[

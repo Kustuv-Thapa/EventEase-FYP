@@ -14,11 +14,31 @@ const khaltiHeaders = () => ({
   "Content-Type": "application/json",
 });
 
-// ── Helper: create ticket if not already exists ──
+// ── Helper: initiate Khalti refund (best-effort, non-blocking) ──
+const initiateKhaltiRefund = async (pidx) => {
+  try {
+    await axios.post(
+      `${process.env.KHALTI_BASE_URL}/epayment/initiate-refund/`,
+      { pidx },
+      { headers: khaltiHeaders() }
+    );
+    console.log(`[Khalti] Refund initiated for pidx: ${pidx}`);
+  } catch (err) {
+    console.error("[Khalti] Refund initiation failed for pidx:", pidx, err.response?.data || err.message);
+  }
+};
+
+// ── Helper: create ticket if not already exists, reactivate if cancelled ──
 const createTicketIfNotExists = async (registration) => {
   try {
     const existing = await Ticket.findOne({ registration: registration._id });
-    if (existing) return existing;
+    if (existing) {
+      if (existing.status !== "VALID") {
+        await Ticket.updateOne({ _id: existing._id }, { $set: { status: "VALID" } });
+        return { ...existing.toObject(), status: "VALID" };
+      }
+      return existing;
+    }
 
     const ticketId = uuidv4();
     const qrPayload = JSON.stringify({
@@ -38,7 +58,12 @@ const createTicketIfNotExists = async (registration) => {
     });
   } catch (err) {
     if (err.code === 11000) {
-      return await Ticket.findOne({ registration: registration._id });
+      const found = await Ticket.findOne({ registration: registration._id });
+      if (found && found.status !== "VALID") {
+        await Ticket.updateOne({ _id: found._id }, { $set: { status: "VALID" } });
+        return { ...found.toObject(), status: "VALID" };
+      }
+      return found;
     }
     throw err;
   }
@@ -77,6 +102,23 @@ exports.initiateKhaltiPayment = async (req, res, next) => {
     });
     if (existingSuccess) {
       return res.status(400).json({ success: false, message: "Payment already completed" });
+    }
+
+    // Block duplicate pending payment within a 2-minute window to prevent double-clicks.
+    // After 2 minutes the session is considered abandoned (user cancelled on Khalti page)
+    // and we mark it failed to allow a clean retry.
+    const existingPending = await Payment.findOne({
+      registrationId: registration._id,
+      status: "pending",
+      method: "khalti",
+    });
+    if (existingPending) {
+      const ageMs = Date.now() - new Date(existingPending.createdAt).getTime();
+      if (ageMs < 2 * 60 * 1000) {
+        return res.status(400).json({ success: false, message: "A payment is already in progress for this registration. Please complete or wait for it to expire." });
+      }
+      // Older than 2 minutes — treat as abandoned, mark failed and allow retry
+      await Payment.updateOne({ _id: existingPending._id }, { $set: { status: "failed" } });
     }
 
     const event = await Event.findById(registration.eventId);
@@ -130,10 +172,11 @@ exports.initiateKhaltiPayment = async (req, res, next) => {
   } catch (error) {
     console.error("[Khalti] Initiate error:", JSON.stringify(error.response?.data || error.message));
     if (error.response?.data) {
+      // Log full Khalti error server-side but return a generic message to the client
+      // to avoid leaking internal API structure or credentials.
       return res.status(error.response.status || 400).json({
         success: false,
-        message: "Khalti error",
-        details: error.response.data,
+        message: "Payment initiation failed. Please try again.",
       });
     }
     next(error);
@@ -198,45 +241,62 @@ exports.verifyKhaltiPayment = async (req, res, next) => {
 
     try {
       await session.withTransaction(async () => {
+        // Re-fetch payment and registration INSIDE the session for safe transactional writes
+        const paymentInSession = await Payment.findById(payment._id).session(session);
+        const registrationInSession = await Registration.findById(registration._id).session(session);
+
+        if (!paymentInSession || !registrationInSession) {
+          throw new Error("Payment or registration disappeared during transaction");
+        }
+
         // Update payment
-        payment.status = "success";
-        payment.verificationResponse = lookupRes.data;
-        payment.transactionId = transaction_id || pidx;
-        await payment.save({ session });
+        paymentInSession.status = "success";
+        paymentInSession.verificationResponse = lookupRes.data;
+        paymentInSession.transactionId = transaction_id || pidx;
+        await paymentInSession.save({ session });
 
         // Confirm registration and increment count (idempotent)
-        if (registration.status !== "confirmed") {
-          registration.status = "confirmed";
-          registration.decidedAt = new Date();
-          await registration.save({ session });
+        if (registrationInSession.status !== "confirmed") {
+          registrationInSession.status = "confirmed";
+          registrationInSession.decidedAt = new Date();
+          await registrationInSession.save({ session });
           await Event.findByIdAndUpdate(
-            registration.eventId,
+            registrationInSession.eventId,
             { $inc: { confirmedCount: 1 } },
             { session }
           );
         }
 
-        // Create ticket (idempotent)
-        const existing = await Ticket.findOne({ registration: registration._id }).session(session);
+        // Create ticket (idempotent — reactivate if cancelled, create if missing)
+        const existing = await Ticket.findOne({ registration: registrationInSession._id }).session(session);
         if (existing) {
-          ticket = existing;
+          if (existing.status !== "VALID") {
+            await Ticket.updateOne(
+              { _id: existing._id },
+              { $set: { status: "VALID" } },
+              { session }
+            );
+            ticket = { ...existing.toObject(), status: "VALID" };
+          } else {
+            ticket = existing;
+          }
         } else {
           const ticketId = uuidv4();
           const qrPayload = JSON.stringify({
             ticketId,
-            eventId: String(registration.eventId),
-            registrationId: String(registration._id),
+            eventId: String(registrationInSession.eventId),
+            registrationId: String(registrationInSession._id),
           });
           const qrCode = await QRCode.toDataURL(qrPayload);
 
           try {
             [ticket] = await Ticket.create(
-              [{ user: registration.userId, event: registration.eventId, registration: registration._id, ticketId, qrCode, status: "VALID" }],
+              [{ user: registrationInSession.userId, event: registrationInSession.eventId, registration: registrationInSession._id, ticketId, qrCode, status: "VALID" }],
               { session }
             );
           } catch (err) {
             if (err.code === 11000) {
-              ticket = await Ticket.findOne({ registration: registration._id }).session(session);
+              ticket = await Ticket.findOne({ registration: registrationInSession._id }).session(session);
             } else {
               throw err;
             }
@@ -270,17 +330,27 @@ exports.verifyKhaltiPayment = async (req, res, next) => {
     // Step 5: Send confirmation email (non-blocking — never fails the response)
     try {
       const user = await User.findById(registration.userId).select("name email");
-      const event = await Event.findById(registration.eventId).select("title schedule");
+      const event = await Event.findById(registration.eventId).select("title schedule venue");
       if (user && event) {
-        sendPaymentConfirmationEmail({
+        const eventDate = event.schedule?.startDateTime
+          ? new Date(event.schedule.startDateTime).toLocaleString("en-US", { dateStyle: "long", timeStyle: "short" })
+          : "TBD";
+        const eventVenue = event.venue?.name
+          ? `${event.venue.name}${event.venue.city ? `, ${event.venue.city}` : ""}`
+          : undefined;
+        await sendPaymentConfirmationEmail({
           to: user.email,
           name: user.name,
           eventTitle: event.title,
           amount: payment.amount,
           ticketId: ticket?.ticketId,
+          eventDate,
+          eventVenue,
         });
       }
-    } catch { /* email failure must never break the response */ }
+    } catch (err) {
+      console.error("[Email] Payment confirmation email failed:", err.message);
+    }
 
     return res.status(200).json({ success: true, message: "Payment verified and ticket issued" });
   } catch (error) {
@@ -288,3 +358,6 @@ exports.verifyKhaltiPayment = async (req, res, next) => {
     next(error);
   }
 };
+
+// Export refund helper so registrationController can call it
+exports.initiateKhaltiRefund = initiateKhaltiRefund;

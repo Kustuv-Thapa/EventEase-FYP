@@ -11,7 +11,7 @@ const PaymentSuccess = () => {
     const khaltiStatus = searchParams.get("status");
 
     if (!pidx) {
-      setVerifyStatus("success");
+      setVerifyStatus("failed");
       return;
     }
 

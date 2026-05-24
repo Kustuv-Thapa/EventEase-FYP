@@ -73,7 +73,8 @@ const eventSchema = new mongoose.Schema(
       index: true,
     },
 
-    image: { type: String, default: "" }, // base64 data URL
+    image: { type: String, default: "" }, // base64 data URL — cover image (first of images array)
+    images: { type: [String], default: [] }, // gallery images (base64 data URLs, max 5)
     confirmedCount: { type: Number, default: 0, min: 0 },
     bookingId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -107,6 +108,30 @@ eventSchema.pre("validate", function () {
   if (this.pricing?.type === "PAID" && (!this.pricing.price || this.pricing.price <= 0)) {
     this.invalidate("pricing.price", "Paid events must have price > 0");
   }
+});
+
+// Guard against invalid status transitions
+const VALID_TRANSITIONS = {
+  DRAFT: ["PENDING_APPROVAL", "CANCELLED"],
+  PENDING_APPROVAL: ["PUBLISHED", "DRAFT", "CANCELLED"],
+  PUBLISHED: ["COMPLETED", "CANCELLED"],
+  CANCELLED: [],   // terminal
+  COMPLETED: [],   // terminal
+};
+
+eventSchema.pre("save", function () {
+  // Only enforce when status is being modified on an existing document
+  if (!this.isNew && this.isModified("status")) {
+    const prev = this._previousStatus;
+    if (prev && VALID_TRANSITIONS[prev] && !VALID_TRANSITIONS[prev].includes(this.status)) {
+      throw Object.assign(
+        new Error(`Invalid status transition: ${prev} → ${this.status}`),
+        { statusCode: 400 }
+      );
+    }
+  }
+  // Cache current status so the next save can compare
+  this._previousStatus = this.status;
 });
 
 module.exports = mongoose.model("Event", eventSchema);

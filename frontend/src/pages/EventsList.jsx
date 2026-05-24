@@ -2,19 +2,18 @@ import { useEffect, useState } from "react";
 import { getEventsApi } from "../api/eventApi";
 import EventCard from "../components/EventCard";
 import Loader from "../components/Loader";
-import ErrorMessage from "../components/ErrorMessage";
+import toast from "react-hot-toast";
 import EmptyState from "../components/EmptyState";
 
 const EventsList = () => {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [search, setSearch] = useState("");
 
   useEffect(() => {
     getEventsApi()
       .then((res) => setEvents(res.data.data?.items || []))
-      .catch(() => setError("Failed to fetch events"))
+      .catch(() => toast.error("Failed to fetch events"))
       .finally(() => setLoading(false));
   }, []);
 
@@ -50,7 +49,6 @@ const EventsList = () => {
       </div>
 
       <div className="container" style={{ paddingTop: 32 }}>
-        <ErrorMessage message={error} />
         {filtered.length === 0 ? (
           <EmptyState
             icon="🎭"

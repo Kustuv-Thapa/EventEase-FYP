@@ -14,6 +14,7 @@ const {
   uploadEventImage,
   updateCapacity,
   cancelEvent,
+  updateEventGallery,
 } = require("../controllers/eventController");
 
 const { protect } = require("../middlewares/authMiddleware");
@@ -42,6 +43,7 @@ router.patch("/:id/submit", protect, allowRoles("ORGANIZER"), validateObjectId("
 router.patch("/:id/approve", protect, allowRoles("ADMIN"), validateObjectId("id"), adminApproveEvent);
 router.patch("/:id/reject", protect, allowRoles("ADMIN"), validateObjectId("id"), adminRejectEvent);
 router.patch("/:id/image", protect, allowRoles("ADMIN", "ORGANIZER"), validateObjectId("id"), uploadEventImage);
+router.patch("/:id/gallery", protect, allowRoles("ADMIN", "ORGANIZER"), validateObjectId("id"), updateEventGallery);
 router.patch("/:id/capacity", protect, allowRoles("ADMIN", "ORGANIZER"), validateObjectId("id"), updateCapacity);
 router.patch("/:id/cancel", protect, allowRoles("ADMIN", "ORGANIZER"), validateObjectId("id"), cancelEvent);
 

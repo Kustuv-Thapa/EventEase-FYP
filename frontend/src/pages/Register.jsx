@@ -3,7 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import useAuth from "../hooks/useAuth";
 import { validateRegisterForm } from "../utils/validators";
 import { resendOtpApi } from "../api/authApi";
-import ErrorMessage from "../components/ErrorMessage";
+import toast from "react-hot-toast";
 import "../assets/styles/forms.css";
 
 const ROLES = [
@@ -17,17 +17,12 @@ const Register = () => {
 
   const [formData, setFormData] = useState({ name: "", email: "", password: "", role: "ATTENDEE" });
   const [errors, setErrors] = useState({});
-  const [serverError, setServerError] = useState("");
   const [loading, setLoading] = useState(false);
-
-  // OTP step
-  const [step, setStep] = useState("register"); // "register" | "otp"
+  const [step, setStep] = useState("register");
   const [pendingEmail, setPendingEmail] = useState("");
   const [otp, setOtp] = useState("");
-  const [otpError, setOtpError] = useState("");
   const [otpLoading, setOtpLoading] = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
-  const [resendMsg, setResendMsg] = useState("");
 
   const handleChange = (e) => setFormData((p) => ({ ...p, [e.target.name]: e.target.value }));
 
@@ -36,12 +31,12 @@ const Register = () => {
     const validationErrors = validateRegisterForm(formData);
     if (Object.keys(validationErrors).length > 0) { setErrors(validationErrors); return; }
     try {
-      setErrors({}); setServerError(""); setLoading(true);
+      setErrors({}); setLoading(true);
       await register(formData);
       setPendingEmail(formData.email);
       setStep("otp");
     } catch (error) {
-      setServerError(error.response?.data?.message || "Registration failed");
+      toast.error(error.response?.data?.message || "Registration failed");
     } finally {
       setLoading(false);
     }
@@ -49,13 +44,13 @@ const Register = () => {
 
   const handleVerifyOtp = async (e) => {
     e.preventDefault();
-    if (!otp || otp.trim().length !== 6) { setOtpError("Please enter the 6-digit code"); return; }
+    if (!otp || otp.trim().length !== 6) { toast.error("Please enter the 6-digit code"); return; }
     try {
-      setOtpError(""); setOtpLoading(true);
+      setOtpLoading(true);
       await verifyOtp({ email: pendingEmail, otp: otp.trim() });
       navigate("/");
     } catch (error) {
-      setOtpError(error.response?.data?.message || "Verification failed");
+      toast.error(error.response?.data?.message || "Verification failed");
     } finally {
       setOtpLoading(false);
     }
@@ -63,11 +58,11 @@ const Register = () => {
 
   const handleResend = async () => {
     try {
-      setResendMsg(""); setResendLoading(true);
+      setResendLoading(true);
       await resendOtpApi(pendingEmail);
-      setResendMsg("A new code has been sent to your email.");
+      toast.success("A new code has been sent to your email.");
     } catch {
-      setResendMsg("Failed to resend. Please try again.");
+      toast.error("Failed to resend. Please try again.");
     } finally {
       setResendLoading(false);
     }
@@ -84,13 +79,6 @@ const Register = () => {
               We sent a 6-digit code to <strong>{pendingEmail}</strong>
             </p>
           </div>
-
-          {otpError && <ErrorMessage message={otpError} />}
-          {resendMsg && (
-            <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 8, padding: "10px 14px", fontSize: 13, color: "#15803d", marginBottom: 16 }}>
-              {resendMsg}
-            </div>
-          )}
 
           <form onSubmit={handleVerifyOtp} autoComplete="off">
             <div className="form-group">
@@ -147,8 +135,6 @@ const Register = () => {
           <h2>Create account</h2>
           <p className="form-subtitle">Join EventEase — it's free</p>
         </div>
-
-        <ErrorMessage message={serverError} />
 
         <form onSubmit={handleSubmit} autoComplete="off">
           <div className={`form-group${errors.name ? " has-error" : ""}`}>
