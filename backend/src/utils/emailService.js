@@ -1,4 +1,4 @@
-const nodemailer = require("nodemailer");
+const { Resend } = require("resend");
 
 // Escape HTML special characters to prevent injection in email templates
 const escHtml = (str) => {
@@ -6,31 +6,18 @@ const escHtml = (str) => {
   return str.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 };
 
-const createTransporter = () => {
-  return nodemailer.createTransport({
-    host: process.env.EMAIL_HOST,
-    port: parseInt(process.env.EMAIL_PORT || "587"),
-    secure: process.env.EMAIL_PORT === "465",
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
-  });
-};
-
 const sendEmail = async ({ to, subject, html }) => {
   try {
-    const transporter = createTransporter();
-    await transporter.sendMail({
-      from: `"EventEase" <${process.env.EMAIL_USER}>`,
-      to,
-      subject,
-      html,
-    });
-    console.log(`[Email] Sent "${subject}" to ${to}`);
+    const resend = new Resend(process.env.RESEND_API_KEY);
+    const from = process.env.EMAIL_FROM || "EventEase <onboarding@resend.dev>";
+    const { error } = await resend.emails.send({ from, to, subject, html });
+    if (error) {
+      console.error("[Email] FAILED to send email:", error.message);
+    } else {
+      console.log(`[Email] Sent "${subject}" to ${to}`);
+    }
   } catch (err) {
     console.error("[Email] FAILED to send email:", err.message);
-    console.error("[Email] Config — HOST:", process.env.EMAIL_HOST, "PORT:", process.env.EMAIL_PORT, "USER:", process.env.EMAIL_USER);
   }
 };
 
