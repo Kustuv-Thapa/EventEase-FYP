@@ -7,6 +7,7 @@ import toast from "react-hot-toast";
 import Loader from "../components/Loader";
 import EmptyState from "../components/EmptyState";
 import StarRating from "../components/StarRating";
+import ConfirmModal from "../components/ConfirmModal";
 
 const TABS = [
   { key: "events",        label: "Event Approvals",     icon: "🎪", color: "#d97706", bg: "#fffbeb" },
@@ -48,6 +49,7 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [rejectReason, setRejectReason] = useState({});
   const [activeTab, setActiveTab] = useState("events");
+  const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: "", message: "", onConfirm: null });
   const [approvalInfo, setApprovalInfo] = useState(null);
   const [eventSearch, setEventSearch] = useState("");
 
@@ -151,15 +153,23 @@ export default function AdminDashboard() {
   };
 
   const handleAdminDeleteFeedback = async (feedbackId) => {
-    if (!window.confirm("Permanently delete this review?")) return;
-    try {
-      await adminDeleteFeedbackApi(feedbackId);
-      toast.success("Feedback deleted successfully");
-      const res = await adminGetEventFeedbackApi(feedbackEventId);
-      setFeedbackData(res.data.data);
-    } catch (err) {
-      toast.error(err.response?.data?.message || "Failed to delete feedback");
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: "Delete Review",
+      message: "Permanently delete this review? This cannot be undone.",
+      confirmLabel: "Delete",
+      onConfirm: async () => {
+        setConfirmModal({ isOpen: false });
+        try {
+          await adminDeleteFeedbackApi(feedbackId);
+          toast.success("Feedback deleted successfully");
+          const res = await adminGetEventFeedbackApi(feedbackEventId);
+          setFeedbackData(res.data.data);
+        } catch (err) {
+          toast.error(err.response?.data?.message || "Failed to delete feedback");
+        }
+      },
+    });
   };
 
   // ── User management handlers ──
@@ -227,20 +237,27 @@ export default function AdminDashboard() {
   };
 
   const handleDeleteUser = async (userId, userName) => {
-    if (!window.confirm(`Delete user "${userName}"? This cannot be undone.`)) return;
-    setUserActionLoading(userId + "_delete");
-    try {
-      await adminDeleteUserApi(userId);
-      toast.success("User deleted successfully");
-      fetchUsers(userPage);
-      // Refresh stats
-      const statsRes = await adminGetUserStatsApi();
-      setUserStats(statsRes.data.data);
-    } catch (err) {
-      toast.error(err.response?.data?.message || "Failed to delete user");
-    } finally {
-      setUserActionLoading(null);
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: "Delete User",
+      message: `Delete user "${userName}"? This cannot be undone.`,
+      confirmLabel: "Delete",
+      onConfirm: async () => {
+        setConfirmModal({ isOpen: false });
+        setUserActionLoading(userId + "_delete");
+        try {
+          await adminDeleteUserApi(userId);
+          toast.success("User deleted successfully");
+          fetchUsers(userPage);
+          const statsRes = await adminGetUserStatsApi();
+          setUserStats(statsRes.data.data);
+        } catch (err) {
+          toast.error(err.response?.data?.message || "Failed to delete user");
+        } finally {
+          setUserActionLoading(null);
+        }
+      },
+    });
   };
 
   if (loading) return <Loader />;
@@ -251,6 +268,14 @@ export default function AdminDashboard() {
 
   return (
     <div style={{ background: "var(--bg)", minHeight: "100vh" }}>
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmLabel={confirmModal.confirmLabel || "Confirm"}
+        onConfirm={confirmModal.onConfirm}
+        onCancel={() => setConfirmModal({ isOpen: false })}
+      />
       <div className="page-banner">
         <div className="page-banner-inner">
           <h1>Admin Dashboard</h1>

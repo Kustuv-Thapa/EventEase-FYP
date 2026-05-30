@@ -9,6 +9,7 @@ import toast from "react-hot-toast";
 import Loader from "../components/Loader";
 import GalleryUploader from "../components/GalleryUploader";
 import EmptyState from "../components/EmptyState";
+import ConfirmModal from "../components/ConfirmModal";
 
 const EMPTY_FORM = {
   title: "", description: "", genre: "",
@@ -63,6 +64,9 @@ export default function OrganizerEventManagement() {
   const [feedbackEventId, setFeedbackEventId] = useState(null);
   const [feedbackData, setFeedbackData] = useState(null);
   const [feedbackLoading, setFeedbackLoading] = useState(false);
+
+  // Confirm modal state
+  const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: "", message: "", onConfirm: null });
 
   const fetchAll = async () => {
     try {
@@ -204,9 +208,16 @@ export default function OrganizerEventManagement() {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Delete this event?")) return;
-    try { await deleteEventApi(id); toast.success("Event deleted successfully!"); fetchAll(); }
-    catch (err) { toast.error(err.response?.data?.message || "Failed to delete event"); }
+    setConfirmModal({
+      isOpen: true,
+      title: "Delete Event",
+      message: "Are you sure you want to delete this event? This cannot be undone.",
+      onConfirm: async () => {
+        setConfirmModal({ isOpen: false });
+        try { await deleteEventApi(id); toast.success("Event deleted successfully!"); fetchAll(); }
+        catch (err) { toast.error(err.response?.data?.message || "Failed to delete event"); }
+      },
+    });
   };
   const handleSubmitForApproval = async (id) => {
     try { await submitEventForApprovalApi(id); toast.success("Event submitted for approval!"); fetchAll(); }
@@ -219,9 +230,17 @@ export default function OrganizerEventManagement() {
     catch (err) { toast.error(err.response?.data?.message || "Failed to update capacity"); }
   };
   const handleCancelEvent = async (id) => {
-    if (!window.confirm("Cancel this event? All registrations and tickets will be cancelled.")) return;
-    try { await cancelEventApi(id); toast.success("Event cancelled successfully"); fetchAll(); }
-    catch (err) { toast.error(err.response?.data?.message || "Failed to cancel event"); }
+    setConfirmModal({
+      isOpen: true,
+      title: "Cancel Event",
+      message: "Cancel this event? All registrations and tickets will be cancelled and attendees will be notified.",
+      confirmLabel: "Yes, Cancel Event",
+      onConfirm: async () => {
+        setConfirmModal({ isOpen: false });
+        try { await cancelEventApi(id); toast.success("Event cancelled successfully"); fetchAll(); }
+        catch (err) { toast.error(err.response?.data?.message || "Failed to cancel event"); }
+      },
+    });
   };
 
   const handleViewAttendees = async (eventId) => {
@@ -281,6 +300,14 @@ export default function OrganizerEventManagement() {
 
   return (
     <div style={{ background: "var(--bg)", minHeight: "100vh" }}>
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmLabel={confirmModal.confirmLabel || "Confirm"}
+        onConfirm={confirmModal.onConfirm}
+        onCancel={() => setConfirmModal({ isOpen: false })}
+      />
       {/* Banner */}
       <div className="page-banner">
         <div className="page-banner-inner" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>

@@ -5,6 +5,7 @@ import Loader from "./Loader";
 import ErrorMessage from "./ErrorMessage";
 import EmptyState from "./EmptyState";
 import useAuth from "../hooks/useAuth";
+import ConfirmModal from "./ConfirmModal";
 
 const formatDate = (dateString) =>
   new Date(dateString).toLocaleDateString("en-US", { dateStyle: "medium" });
@@ -42,6 +43,7 @@ const OrganizerReplySection = ({ review, isOrganizer, onReplyChange }) => {
   const [replyText, setReplyText] = useState(review.organizerReply?.text || "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [confirmModal, setConfirmModal] = useState({ isOpen: false });
 
   const handleSubmit = async () => {
     if (!replyText.trim()) return;
@@ -59,22 +61,35 @@ const OrganizerReplySection = ({ review, isOrganizer, onReplyChange }) => {
   };
 
   const handleDelete = async () => {
-    if (!window.confirm("Delete your reply?")) return;
-    setLoading(true);
-    setError("");
-    try {
-      await deleteOrganizerReplyApi(review._id);
-      setReplyText("");
-      onReplyChange();
-    } catch (err) {
-      setError(err.response?.data?.message || "Failed to delete reply.");
-    } finally {
-      setLoading(false);
-    }
+    setConfirmModal({
+      isOpen: true,
+      onConfirm: async () => {
+        setConfirmModal({ isOpen: false });
+        setLoading(true);
+        setError("");
+        try {
+          await deleteOrganizerReplyApi(review._id);
+          setReplyText("");
+          onReplyChange();
+        } catch (err) {
+          setError(err.response?.data?.message || "Failed to delete reply.");
+        } finally {
+          setLoading(false);
+        }
+      },
+    });
   };
 
   return (
     <div style={{ marginTop: 10 }}>
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title="Delete Reply"
+        message="Delete your reply? This cannot be undone."
+        confirmLabel="Delete"
+        onConfirm={confirmModal.onConfirm}
+        onCancel={() => setConfirmModal({ isOpen: false })}
+      />
       {/* Existing reply display */}
       {hasReply && !editing && (
         <div style={{

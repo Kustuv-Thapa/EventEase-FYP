@@ -5,6 +5,7 @@ import { initiateKhaltiPaymentApi } from "../api/khaltiApi";
 import toast from "react-hot-toast";
 import Loader from "../components/Loader";
 import EmptyState from "../components/EmptyState";
+import ConfirmModal from "../components/ConfirmModal";
 
 const STATUS_CONFIG = {
   pending:   { label: "Pending",   color: "var(--warning)",  bg: "var(--warning-light)",  border: "var(--warning)",  icon: "⏳" },
@@ -22,6 +23,7 @@ const MyRegistrations = () => {
   const [activeFilter, setActiveFilter] = useState("All");
   const [cancelling, setCancelling] = useState(null);
   const [page, setPage] = useState(1);
+  const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: "", message: "", onConfirm: null });
 
   const fetchData = async () => {
     try {
@@ -50,17 +52,25 @@ const MyRegistrations = () => {
   };
 
   const handleCancel = async (regId) => {
-    if (!window.confirm("Cancel this registration? Your ticket will also be cancelled.")) return;
-    setCancelling(regId);
-    try {
-      await cancelMyRegistrationApi(regId);
-      toast.success("Registration cancelled.");
-      fetchData();
-    } catch (err) {
-      toast.error(err.response?.data?.message || "Failed to cancel registration");
-    } finally {
-      setCancelling(null);
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: "Cancel Registration",
+      message: "Cancel this registration? Your ticket will also be cancelled.",
+      confirmLabel: "Yes, Cancel",
+      onConfirm: async () => {
+        setConfirmModal({ isOpen: false });
+        setCancelling(regId);
+        try {
+          await cancelMyRegistrationApi(regId);
+          toast.success("Registration cancelled.");
+          fetchData();
+        } catch (err) {
+          toast.error(err.response?.data?.message || "Failed to cancel registration");
+        } finally {
+          setCancelling(null);
+        }
+      },
+    });
   };
 
   const filtered = activeFilter === "All"
@@ -84,6 +94,14 @@ const MyRegistrations = () => {
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmLabel={confirmModal.confirmLabel || "Confirm"}
+        onConfirm={confirmModal.onConfirm}
+        onCancel={() => setConfirmModal({ isOpen: false })}
+      />
       <div className="page-banner">
         <div className="page-banner-inner" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: 12 }}>
           <div>

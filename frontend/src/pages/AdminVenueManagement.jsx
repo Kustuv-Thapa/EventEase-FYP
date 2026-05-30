@@ -4,6 +4,7 @@ import toast from "react-hot-toast";
 import Loader from "../components/Loader";
 import ImageUploader from "../components/ImageUploader";
 import EmptyState from "../components/EmptyState";
+import ConfirmModal from "../components/ConfirmModal";
 
 const EMPTY_FORM = { name: "", capacity: "", address: "", city: "", country: "", amenities: "", image: "" };
 
@@ -62,6 +63,7 @@ const VenueForm = ({ form, onChange, onSubmit, onCancel, submitting, title }) =>
 
 export default function AdminVenueManagement() {
   const [venues, setVenues] = useState([]);
+  const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: "", message: "", onConfirm: null });
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -126,9 +128,17 @@ export default function AdminVenueManagement() {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Delete this venue?")) return;
-    try { await deleteVenueApi(id); toast.success("Venue deleted successfully!"); fetchVenues(); }
-    catch (err) { toast.error(err.response?.data?.message || "Failed to delete venue"); }
+    setConfirmModal({
+      isOpen: true,
+      title: "Delete Venue",
+      message: "Delete this venue? This cannot be undone.",
+      confirmLabel: "Delete",
+      onConfirm: async () => {
+        setConfirmModal({ isOpen: false });
+        try { await deleteVenueApi(id); toast.success("Venue deleted successfully!"); fetchVenues(); }
+        catch (err) { toast.error(err.response?.data?.message || "Failed to delete venue"); }
+      },
+    });
   };
 
   if (loading) return <Loader />;
@@ -142,6 +152,14 @@ export default function AdminVenueManagement() {
 
   return (
     <div style={{ background: "var(--bg)", minHeight: "100vh" }}>
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmLabel={confirmModal.confirmLabel || "Confirm"}
+        onConfirm={confirmModal.onConfirm}
+        onCancel={() => setConfirmModal({ isOpen: false })}
+      />
       {/* Banner */}
       <div className="page-banner">
         <div className="page-banner-inner" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
