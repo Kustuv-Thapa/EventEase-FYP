@@ -25,14 +25,17 @@ app.use(helmet({
   contentSecurityPolicy: false,
 }));
 app.use(cors({
-  // In production (or when FRONTEND_URL is set), restrict to that origin only.
-  // Fall back to wildcard only in explicit development mode to avoid accidentally
-  // opening CORS when NODE_ENV is undefined in a deployed environment.
-  origin: process.env.NODE_ENV === "production"
-    ? process.env.FRONTEND_URL
-    : process.env.NODE_ENV === "development" || process.env.NODE_ENV === "test"
-      ? "*"
-      : (process.env.FRONTEND_URL || "*"),
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, curl, etc.)
+    if (!origin) return callback(null, true);
+    // Allow localhost in development
+    if (origin.startsWith("http://localhost")) return callback(null, true);
+    // Allow the configured frontend URL
+    if (process.env.FRONTEND_URL && origin === process.env.FRONTEND_URL) return callback(null, true);
+    // Allow all Vercel preview deployments
+    if (origin.endsWith(".vercel.app")) return callback(null, true);
+    return callback(new Error("Not allowed by CORS"));
+  },
   credentials: true,
 }));
 app.use(express.json({ limit: "5mb" }));
