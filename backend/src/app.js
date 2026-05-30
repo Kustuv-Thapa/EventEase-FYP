@@ -19,6 +19,9 @@ const errorHandler = require("./middlewares/errorHandler");
 
 const app = express();
 
+// Trust the first proxy hop (required for express-rate-limit to work correctly behind Render/Vercel/etc.)
+app.set("trust proxy", 1);
+
 // Core middlewares
 app.use(helmet({
   // Allow base64 images in CSP since the app uses data URIs for event/avatar images
