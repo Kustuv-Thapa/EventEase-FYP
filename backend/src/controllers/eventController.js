@@ -416,6 +416,14 @@ const deleteEvent = async (req, res, next) => {
       { $set: { status: "CANCELLED" } }
     );
 
+    // Cancel the linked booking so the venue slot becomes available again
+    if (event.bookingId) {
+      await Booking.updateOne(
+        { _id: event.bookingId },
+        { $set: { status: "cancelled" } }
+      );
+    }
+
     await event.deleteOne();
     res.status(200).json({ success: true, message: "Event deleted" });
   } catch (err) {
