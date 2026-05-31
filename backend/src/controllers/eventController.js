@@ -302,6 +302,7 @@ const updateEvent = async (req, res, next) => {
           start: newStart,
           end: newEnd,
           session,
+          excludeBookingId: event.bookingId,
         });
 
         await Booking.updateOne(

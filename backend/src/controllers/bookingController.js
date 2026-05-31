@@ -32,8 +32,8 @@ async function hasOverlap({ venueId, start, end, excludeBookingId, session, incl
  * @returns {Promise<BookingDocument>}
  * @throws {Error} with statusCode 409 if slot is taken
  */
-exports.createAndApproveBooking = async ({ venueId, eventId, requestedBy, start, end, session }) => {
-  const overlap = await hasOverlap({ venueId, start, end, session });
+exports.createAndApproveBooking = async ({ venueId, eventId, requestedBy, start, end, session, excludeBookingId }) => {
+  const overlap = await hasOverlap({ venueId, start, end, session, excludeBookingId });
   if (overlap) {
     throw Object.assign(new Error("Time slot not available"), { statusCode: 409 });
   }
