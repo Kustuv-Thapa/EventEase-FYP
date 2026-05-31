@@ -179,7 +179,7 @@ const login = async (req, res, next) => {
     // an email exists via a different error message (email enumeration).
     if (!user.isVerified) {
       res.status(401);
-      throw new Error("Invalid credentials");
+      throw new Error("Account not verified. Please verify your email.");
     }
 
     const token = signToken({ sub: user._id.toString(), role: user.role });
