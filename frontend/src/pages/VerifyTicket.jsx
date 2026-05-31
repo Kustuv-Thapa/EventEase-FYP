@@ -217,7 +217,7 @@ const VerifyTicket = () => {
               {ticket.event?.schedule?.startDateTime && (
                 <Row
                   label="Date"
-                  value={new Date(ticket.event.schedule.startDateTime).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}
+                  value={new Date(ticket.event.schedule.startDateTime).toLocaleString("en-US", { timeZone: "Asia/Kathmandu", dateStyle: "medium", timeStyle: "short" })}
                 />
               )}
               <Row label="Ticket ID" value={ticket.ticketId} mono />

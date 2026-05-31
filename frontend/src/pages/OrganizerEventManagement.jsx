@@ -37,8 +37,8 @@ const Dot = ({ status }) => {
   );
 };
 
-const fmt = (dt) => dt ? new Date(dt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—";
-const fmtTime = (dt) => dt ? new Date(dt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "—";
+const fmt = (dt) => dt ? new Date(dt).toLocaleDateString("en-US", { timeZone: "Asia/Kathmandu", month: "short", day: "numeric", year: "numeric" }) : "—";
+const fmtTime = (dt) => dt ? new Date(dt).toLocaleString("en-US", { timeZone: "Asia/Kathmandu", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "—";
 
 export default function OrganizerEventManagement() {
   const [events, setEvents] = useState([]);

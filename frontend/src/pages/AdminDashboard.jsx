@@ -17,8 +17,8 @@ const TABS = [
   { key: "users",         label: "User Management",     icon: "👥", color: "#0f172a", bg: "#f8fafc" },
 ];
 
-const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-US", { dateStyle: "medium" }) : "—";
-const fmtDateTime = (d) => d ? new Date(d).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }) : "—";
+const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-US", { timeZone: "Asia/Kathmandu", dateStyle: "medium" }) : "—";
+const fmtDateTime = (d) => d ? new Date(d).toLocaleString("en-US", { timeZone: "Asia/Kathmandu", dateStyle: "medium", timeStyle: "short" }) : "—";
 
 const ActionBtn = ({ onClick, children, variant = "success", disabled }) => {
   const styles = {

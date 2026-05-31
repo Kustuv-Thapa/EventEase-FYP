@@ -151,7 +151,7 @@ const MyTickets = () => {
                         )}
                         {startDate && (
                           <span style={{ fontSize: 13, color: "var(--text-muted)", display: "flex", gap: 5 }}>
-                            🕐 {startDate.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}
+                            🕐 {startDate.toLocaleString("en-US", { timeZone: "Asia/Kathmandu", dateStyle: "medium", timeStyle: "short" })}
                           </span>
                         )}
                       </div>

@@ -10,7 +10,7 @@ import FeedbackList from "../components/FeedbackList";
 import FeedbackForm from "../components/FeedbackForm";
 import useAuth from "../hooks/useAuth";
 
-const fmt = (d, opts) => d ? new Date(d).toLocaleString("en-US", opts) : "—";
+const fmt = (d, opts) => d ? new Date(d).toLocaleString("en-US", { timeZone: "Asia/Kathmandu", ...opts }) : "—";
 
 const InfoCard = ({ icon, label, children }) => (
   <div style={{
