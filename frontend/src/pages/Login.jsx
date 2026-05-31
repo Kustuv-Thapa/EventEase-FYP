@@ -27,7 +27,7 @@ const Login = () => {
       navigate("/");
     } catch (error) {
       const msg = error.response?.data?.message || "Login failed";
-      if (error.response?.status === 403 && msg.includes("verify")) {
+      if (error.response?.status === 401 && msg.toLowerCase().includes("invalid credentials")) {
         setUnverifiedEmail(formData.email);
       }
       toast.error(msg);
