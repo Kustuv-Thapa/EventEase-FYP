@@ -172,11 +172,17 @@ export default function OrganizerEventManagement() {
 
   const buildPayload = () => {
     const v = selectedVenue;
+    // Convert local datetime-local input values to proper ISO strings
+    // The input gives us "YYYY-MM-DDTHH:mm" in local time — we need to
+    // create a Date object from it (which treats it as local time) and
+    // then send the ISO string (which includes UTC offset)
+    const startISO = form.startDateTime ? new Date(form.startDateTime).toISOString() : "";
+    const endISO = form.endDateTime ? new Date(form.endDateTime).toISOString() : "";
     const p = {
       title: form.title, description: form.description,
       genre: form.genre ? form.genre.split(",").map((g) => g.trim()).filter(Boolean) : [],
       venueId: form.venueId,
-      schedule: { startDateTime: form.startDateTime, endDateTime: form.endDateTime },
+      schedule: { startDateTime: startISO, endDateTime: endISO },
       capacity: Number(form.capacity),
       pricing: { type: form.pricingType, price: form.pricingType === "PAID" ? Number(form.price) : 0 },
     };
