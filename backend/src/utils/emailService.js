@@ -1,4 +1,4 @@
-const { Resend } = require("resend");
+const { MailerSend, EmailParams, Sender, Recipient } = require("mailersend");
 
 // Escape HTML special characters to prevent injection in email templates
 const escHtml = (str) => {
@@ -8,14 +8,18 @@ const escHtml = (str) => {
 
 const sendEmail = async ({ to, subject, html }) => {
   try {
-    const resend = new Resend(process.env.RESEND_API_KEY);
-    const from = process.env.EMAIL_FROM || "EventEase <onboarding@resend.dev>";
-    const { error } = await resend.emails.send({ from, to, subject, html });
-    if (error) {
-      console.error("[Email] FAILED to send email:", error.message);
-    } else {
-      console.log(`[Email] Sent "${subject}" to ${to}`);
-    }
+    const mailerSend = new MailerSend({ apiKey: process.env.MAILERSEND_API_KEY });
+    const fromEmail = process.env.EMAIL_FROM_ADDRESS || `noreply@${process.env.MAILERSEND_DOMAIN}`;
+    const fromName = "EventEase";
+
+    const emailParams = new EmailParams()
+      .setFrom(new Sender(fromEmail, fromName))
+      .setTo([new Recipient(to)])
+      .setSubject(subject)
+      .setHtml(html);
+
+    await mailerSend.email.send(emailParams);
+    console.log(`[Email] Sent "${subject}" to ${to}`);
   } catch (err) {
     console.error("[Email] FAILED to send email:", err.message);
   }
