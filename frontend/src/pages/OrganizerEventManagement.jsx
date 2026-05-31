@@ -101,7 +101,10 @@ export default function OrganizerEventManagement() {
     debounceRef.current = setTimeout(async () => {
       setCheckingAvailability(true);
       try {
-        const res = await checkVenueAvailabilityApi(venueId, start, end);
+        // When editing, pass the current event's bookingId so the availability check
+        // excludes the event's own booking (otherwise it always shows a conflict)
+        const excludeBookingId = editingEvent?.bookingId || null;
+        const res = await checkVenueAvailabilityApi(venueId, start, end, excludeBookingId);
         setAvailability(res.data);
       } catch { setAvailability(null); }
       finally { setCheckingAvailability(false); }

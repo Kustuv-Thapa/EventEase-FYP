@@ -60,6 +60,7 @@ exports.checkAvailability = async (req, res, next) => {
     const { venueId } = req.params;
     const start = toDate(req.query.start);
     const end = toDate(req.query.end);
+    const excludeBookingId = req.query.excludeBookingId || null;
 
     if (!start || !end) return res.status(400).json({ message: "Invalid start/end date" });
     if (start >= end) return res.status(400).json({ message: "start must be before end" });
@@ -67,8 +68,8 @@ exports.checkAvailability = async (req, res, next) => {
     const venue = await Venue.findById(venueId);
     if (!venue || !venue.isActive) return res.status(404).json({ message: "Venue not available" });
 
-    const approvedOverlap = await hasOverlap({ venueId, start, end });
-    const pendingOverlap = !approvedOverlap && await hasOverlap({ venueId, start, end, includesPending: true });
+    const approvedOverlap = await hasOverlap({ venueId, start, end, excludeBookingId });
+    const pendingOverlap = !approvedOverlap && await hasOverlap({ venueId, start, end, includesPending: true, excludeBookingId });
 
     res.json({
       available: !approvedOverlap,

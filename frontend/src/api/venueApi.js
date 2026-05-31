@@ -8,5 +8,5 @@ export const updateVenueApi = (id, data) => axiosInstance.patch(`/venues/${id}`,
 export const uploadVenueImageApi = (id, image) => axiosInstance.patch(`/venues/${id}/image`, { image });
 export const deleteVenueApi = (id) => axiosInstance.delete(`/venues/${id}`);
 export const cancelVenueBookingApi = (bookingId) => axiosInstance.patch(`/bookings/${bookingId}/cancel`);
-export const checkVenueAvailabilityApi = (venueId, start, end) =>
-  axiosInstance.get(`/bookings/venues/${venueId}/availability`, { params: { start, end } });
+export const checkVenueAvailabilityApi = (venueId, start, end, excludeBookingId = null) =>
+  axiosInstance.get(`/bookings/venues/${venueId}/availability`, { params: { start, end, ...(excludeBookingId && { excludeBookingId }) } });
